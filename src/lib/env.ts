@@ -6,15 +6,26 @@
  * Vercel you must redeploy.
  */
 export function supabaseEnv(): { url: string; anonKey: string } {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
+  const url = normaliseSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+  const missing = [
+    !url && "NEXT_PUBLIC_SUPABASE_URL",
+    !anonKey && "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ].filter(Boolean);
+  if (missing.length > 0 || !url || !anonKey) {
     throw new Error(
-      "Supabase is not configured: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY " +
-        "(in .env.local, or in Vercel's Environment Variables and then redeploy).",
+      `Supabase is not configured: missing ${missing.join(" and ")}. ` +
+        "Set it in .env.local, or in Vercel → Settings → Environment Variables (for Production) and then redeploy.",
     );
   }
   return { url, anonKey };
+}
+
+/** Accepts the URL with stray whitespace, a trailing slash or `/rest/v1/`. */
+export function normaliseSupabaseUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
+  return trimmed || undefined;
 }
 
 /**

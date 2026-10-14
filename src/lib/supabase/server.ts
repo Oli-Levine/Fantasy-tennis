@@ -8,8 +8,10 @@ import { supabaseEnv } from "@/lib/env";
  * Create a new one per request.
  */
 export async function createClient() {
-  const { url, anonKey } = supabaseEnv();
+  // Read cookies first: it marks the page as per-request, so a config problem
+  // shows up when the page is visited rather than failing the whole build.
   const cookieStore = await cookies();
+  const { url, anonKey } = supabaseEnv();
 
   return createServerClient(url, anonKey, {
     cookies: {
