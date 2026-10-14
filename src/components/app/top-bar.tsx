@@ -2,7 +2,15 @@ import Link from "next/link";
 import { LogoMark } from "@/components/app/logo";
 import { AccountMenu } from "@/components/app/account-menu";
 
-export function TopBar({ name, email }: { name: string; email: string }) {
+export function TopBar({
+  name,
+  teamName,
+  email,
+}: {
+  name: string;
+  teamName?: string;
+  email: string;
+}) {
   return (
     <header
       className="sticky top-0 z-40 border-b bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/80"
@@ -15,7 +23,7 @@ export function TopBar({ name, email }: { name: string; email: string }) {
             Fantasy <span className="text-primary">Tennis</span>
           </span>
         </Link>
-        <AccountMenu name={name} email={email} />
+        <AccountMenu name={name} teamName={teamName} email={email} />
       </div>
     </header>
   );

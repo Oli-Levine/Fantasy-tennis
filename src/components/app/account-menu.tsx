@@ -12,7 +12,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { initials } from "@/lib/format";
 
-export function AccountMenu({ name, email }: { name: string; email: string }) {
+export function AccountMenu({
+  name,
+  teamName,
+  email,
+}: {
+  name: string;
+  teamName?: string;
+  email: string;
+}) {
   const signOutForm = useRef<HTMLFormElement>(null);
 
   return (
@@ -26,7 +34,8 @@ export function AccountMenu({ name, email }: { name: string; email: string }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>
-            <div className="truncate font-semibold">{name}</div>
+            {teamName && <div className="truncate font-heading font-semibold">{teamName}</div>}
+            <div className={teamName ? "truncate text-xs" : "truncate font-semibold"}>{name}</div>
             <div className="truncate text-xs font-normal text-muted-foreground">{email}</div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

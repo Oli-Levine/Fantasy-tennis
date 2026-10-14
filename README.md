@@ -37,4 +37,6 @@ npm run screenshots  # 375px phone screenshots of every screen (needs a running 
 - `src/proxy.ts` — refreshes the Supabase session and sends signed-out visitors to `/login`
 - `src/app/globals.css` — theme tokens (colours, fonts, radius, shadows, spacing)
 - `src/components/ui` — shadcn/ui primitives; `src/components/app` — app components
-- `src/lib` — Supabase clients, UK-time deadline helpers, formatting
+- `src/lib` — Supabase clients, database types, auth helpers, UK-time deadline helpers, formatting
+- `src/app/join` — onboarding: club join code, then team name
+- `supabase/` — SQL migrations, seed/cleanup scripts and database tests (see `supabase/README.md`)

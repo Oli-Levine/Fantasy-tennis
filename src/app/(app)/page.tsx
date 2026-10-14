@@ -2,10 +2,11 @@ import { Sparkles } from "lucide-react";
 import { DeadlineCountdown } from "@/components/app/deadline-countdown";
 import { BenchCard, PlayerCard, type PlayerCardData } from "@/components/app/player-card";
 import { StatsHeader } from "@/components/app/stats-header";
+import { requireMember } from "@/lib/auth";
 import { formatPrice, ordinal } from "@/lib/format";
 
-// Demo data so the design can be judged on a phone. Replaced with the
-// signed-in manager's real squad in later phases.
+// Demo squad so the design can be judged on a phone. Replaced with the
+// manager's real squad in Phase 4.
 const DEMO_STARTERS: PlayerCardData[] = [
   { name: "Alex Morgan", clubTeam: "1s", price: 12.5, lastPoints: 18, badge: "TC" },
   { name: "Priya Shah", clubTeam: "1s", price: 9.0, lastPoints: 11, badge: "VC" },
@@ -15,7 +16,8 @@ const DEMO_STARTERS: PlayerCardData[] = [
 const DEMO_BENCH: PlayerCardData = { name: "Sam Lee", clubTeam: "6s", price: 2.5, lastPoints: 3 };
 const BUDGET = 35;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { profile } = await requireMember();
   const spent = [...DEMO_STARTERS, DEMO_BENCH].reduce((sum, p) => sum + p.price, 0);
 
   return (
@@ -34,7 +36,7 @@ export default function HomePage() {
               Preview · demo data
             </span>
           }
-          title="Deuce Bigalow"
+          title={profile.team_name}
           stats={[
             { label: "Budget left", value: formatPrice(BUDGET - spent) },
             { label: "Deadline", value: <DeadlineCountdown /> },
