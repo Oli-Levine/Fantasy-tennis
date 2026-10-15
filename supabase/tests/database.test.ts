@@ -7,6 +7,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
+import { scoreGameweek } from "../../src/lib/scoring";
+import { scoringInputFromRows, type GameweekRows } from "../../src/lib/scoring-input";
 
 const sqlFile = (path: string) => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), "utf8");
 
@@ -26,6 +28,7 @@ const MEMBER = "33333333-3333-4333-8333-333333333333";
 const OUTSIDER = "44444444-4444-4444-8444-444444444444"; // signed in, never entered the code
 const FAKE_MANAGER_1 = "00000000-0000-4000-a000-000000000001";
 const PICKER = "55555555-5555-4555-8555-555555555555"; // picks a squad in the Phase 4 tests
+const SCORER = "66666666-6666-4666-8666-666666666666"; // scored end to end in the Phase 6 tests
 
 let db: PGlite;
 
@@ -764,6 +767,53 @@ describe("results and publishing", () => {
       [gameweekId, PICKER],
     );
     expect(rows).toEqual([{ status: "published", points: 50 }]);
+  });
+});
+
+describe("publishing end to end (same queries as src/lib/recalculate.ts)", () => {
+  it("doubles the captain, switches to the vice-captain and auto-subs the bench", async () => {
+    // A brand-new manager (so no transfer hits) with captain pos 1, vice pos 2.
+    await signUp(SCORER, "scorer@example.com", "Sam Scorer");
+    await as(SCORER, `select public.join_club($1)`, [await joinCode()]);
+    const [gw] = await as<{ id: number }>(
+      ADMIN,
+      `insert into public.gameweeks (number, deadline) values (950, now() + interval '20 minutes') returning id`,
+    );
+    const ids = (await db.query<{ id: string }>(`select id from public.players where is_test_data order by price, name limit 5`)).rows.map((r) => r.id);
+    await as(SCORER, `select public.save_squad($1::jsonb)`, [
+      JSON.stringify(ids.map((player_id, i) => ({ position: i + 1, player_id, is_captain: i === 0, is_vice_captain: i === 1 }))),
+    ]);
+    await as(ADMIN, `update public.gameweeks set deadline = now() - interval '1 second' where id = $1`, [gw.id]);
+    await as(MEMBER, `select public.sync_gameweeks()`);
+
+    const rule = (await db.query<{ id: string }>(`select id from public.scoring_rules where type = 'tick' and points > 0 order by points desc limit 1`)).rows[0];
+    const points = (await db.query<{ points: number }>(`select points from public.scoring_rules where id = $1`, [rule.id])).rows[0].points;
+    const publish = async (results: unknown) => {
+      await as(ADMIN, `select public.admin_save_results($1, $2::jsonb)`, [gw.id, JSON.stringify(results)]);
+      const q = <T,>(sql: string) => as<T>(ADMIN, sql, [gw.id]);
+      const rows: GameweekRows = {
+        rules: await q(`select id, points from public.scoring_rules where $1::bigint is not null`),
+        results: await q(`select player_id, rule_id, count from public.rule_results where gameweek_id = $1`),
+        appearances: await q(`select player_id, did_not_play from public.player_gameweeks where gameweek_id = $1`),
+        entries: await q(`select user_id, chip, transfer_hit from public.gameweek_entries where gameweek_id = $1`),
+        picks: await q(`select user_id, position, player_id, is_captain, is_vice_captain from public.gameweek_picks where gameweek_id = $1`),
+      };
+      const scored = scoreGameweek(scoringInputFromRows(rows));
+      await as(ADMIN, `select public.admin_store_points($1, $2::jsonb, $3::jsonb, true)`, [
+        gw.id,
+        JSON.stringify(Object.entries(scored.players).map(([player_id, s]) => ({ player_id, points: s.points }))),
+        JSON.stringify(Object.entries(scored.entries).map(([user_id, s]) => ({ user_id, points: s.total }))),
+      ]);
+      return (await db.query<{ points: number }>(`select points from public.gameweek_entries where user_id = $1 and gameweek_id = $2`, [SCORER, gw.id])).rows[0].points;
+    };
+    const won = (i: number, dnp = false) => ({ player_id: ids[i], did_not_play: dnp, counts: dnp ? {} : { [rule.id]: 1 } });
+
+    // Everyone wins: captain doubled, bench not used.
+    expect(await publish([0, 1, 2, 3, 4].map((i) => won(i)))).toBe(points * 5);
+    // Captain didn't play: vice-captain doubled, bench comes on.
+    expect(await publish([won(0, true), won(1), won(2), won(3), won(4)])).toBe(points * (2 + 1 + 1 + 1));
+    // A non-captain starter didn't play: captain doubled and bench comes on.
+    expect(await publish([won(0), won(1), won(2, true), won(3), won(4)])).toBe(points * (2 + 1 + 1 + 1));
   });
 });
 

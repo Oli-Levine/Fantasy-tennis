@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles, Users } from "lucide-react";
+import { ChevronRight, Sparkles, Users } from "lucide-react";
 import { DeadlineCountdown } from "@/components/app/deadline-countdown";
 import { EmptyState } from "@/components/app/empty-state";
 import { BenchCard, PlayerCard, type PlayerCardData } from "@/components/app/player-card";
@@ -7,7 +7,8 @@ import { StatsHeader } from "@/components/app/stats-header";
 import { Button } from "@/components/ui/button";
 import { requireMember } from "@/lib/auth";
 import { chipInfo } from "@/lib/chips";
-import { formatPrice } from "@/lib/format";
+import { formatPrice, shortName } from "@/lib/format";
+import { loadLastScore } from "@/lib/last-score";
 import { clubTeamLabel, playerPhotoUrl } from "@/lib/players";
 import { BENCH_INDEX, fromPicks, isFull, round1, squadCost } from "@/lib/squad";
 import { ordinal } from "@/lib/format";
@@ -22,6 +23,9 @@ export default async function HomePage() {
   ]);
   const me = league.standings.find((r) => r.userId === user.id);
   const ranked = league.latest != null && me != null;
+  const last = await loadLastScore(user.id, league.latest);
+  // What each player scored for this manager last gameweek (captain doubled, bench only if subbed on).
+  const lastBreakdown = new Map(last?.score.picks.map((p) => [p.playerId, p]));
 
   const byId = new Map(players.map((p) => [p.id, p]));
   const squad = fromPicks(picks);
@@ -36,12 +40,23 @@ export default async function HomePage() {
       clubTeam: clubTeamLabel(player.club_team),
       price: player.price,
       photoUrl: playerPhotoUrl(player.photo_path),
-      lastPoints: stats[player.id]?.last ?? null,
+      lastPoints: lastBreakdown.get(player.id)?.points ?? stats[player.id]?.last ?? null,
       badge: slot.isCaptain ? (activeChip === "triple_captain" ? "TC" : "C") : slot.isViceCaptain ? "VC" : null,
       unavailable: !player.is_active,
+      tag: lastTag(player.id),
     };
   };
+  function lastTag(playerId: string) {
+    const b = lastBreakdown.get(playerId);
+    if (!b) return null;
+    if (b.autoSubbedIn) return "Subbed on";
+    if (b.didNotPlay) return "Didn't play";
+    if (b.multiplier > 1) return `${b.multiplier}×`;
+    return null;
+  }
   const bench = card(BENCH_INDEX);
+  const benchPlayer = last?.score.picks.find((p) => p.autoSubbedIn);
+  const armbandPlayer = last?.score.picks.find((p) => p.playerId === last.score.multiplierPlayerId);
 
   return (
     <div className="space-y-4">
@@ -79,6 +94,29 @@ export default async function HomePage() {
             { label: "Rank", value: ranked ? ordinal(me.rank) : "–" },
           ]}
         />
+
+        {last && (
+          <Link
+            href={`/league/${user.id}?gw=${last.gameweekId}`}
+            className="mt-4 flex items-center gap-3 rounded-xl bg-muted/70 px-3 py-2.5 text-sm transition-colors hover:bg-muted"
+          >
+            <span className="min-w-0 flex-1 leading-snug">
+              <strong className="font-heading">
+                GW{last.number}: {last.score.total} pts
+              </strong>
+              <span className="text-muted-foreground">
+                {armbandPlayer &&
+                  ` · ${shortName(byId.get(armbandPlayer.playerId)?.name ?? "Captain")} ×${armbandPlayer.multiplier}`}
+                {benchPlayer && ` · ${shortName(byId.get(benchPlayer.playerId)?.name ?? "Bench")} subbed on`}
+                {last.score.hit > 0 && ` · −${last.score.hit} hit`}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center text-xs font-medium text-primary">
+              Breakdown
+              <ChevronRight className="size-4" />
+            </span>
+          </Link>
+        )}
 
         {isFull(squad) ? (
           <>
