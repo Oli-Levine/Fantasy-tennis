@@ -3,7 +3,7 @@ import { AdminHeader } from "@/components/app/admin-header";
 import type { ScoringRule } from "@/lib/database.types";
 import { devAuthBypass } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_RULES } from "../dev-fixtures";
+import { DEMO_RULES } from "@/lib/dev-fixtures";
 import { RulesManager } from "./rules-manager";
 
 export const metadata: Metadata = { title: "Scoring rules · Admin" };

@@ -3,7 +3,7 @@ import { AdminHeader } from "@/components/app/admin-header";
 import { requireAdmin } from "@/lib/auth";
 import { devAuthBypass } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_USERS } from "../dev-fixtures";
+import { DEMO_USERS } from "@/lib/dev-fixtures";
 import { UsersManager } from "./users-manager";
 
 export const metadata: Metadata = { title: "Users · Admin" };

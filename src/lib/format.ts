@@ -1,6 +1,7 @@
 /** Prices are stored in £ millions, e.g. 8.5 → "£8.5m". */
 export function formatPrice(millions: number): string {
-  return `£${(Math.round(millions * 10) / 10).toFixed(1)}m`;
+  const rounded = Math.round(millions * 10) / 10;
+  return `${rounded < 0 ? "−" : ""}£${Math.abs(rounded).toFixed(1)}m`;
 }
 
 /** "Carlos Alcaraz" → "CA", "Alcaraz" → "A". */

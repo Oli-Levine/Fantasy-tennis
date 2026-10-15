@@ -10,7 +10,9 @@ const base = { created_at: now, updated_at: now };
 export const DEMO_PLAYERS: Player[] = [
   ["Ava Thornton", 1, 12.5], ["Ben Achebe", 1, 11.5], ["Harry Lindqvist", 2, 9.0],
   ["Isla Mensah", 2, 8.5], ["Oscar Bright", 3, 7.5], ["Vera Blackwood", 4, 6.0],
-  ["Callum Reid", 5, 5.0], ["Nora Keane", 6, 3.0],
+  ["Callum Reid", 5, 5.0], ["Nora Keane", 6, 3.0], ["Chloe Marsh", 1, 11.0],
+  ["Kiran Patel", 2, 8.0], ["Poppy Adeyemi", 3, 7.0], ["Will Carver", 4, 5.5],
+  ["Daisy Nkemelu", 5, 4.5], ["Jess Holloway", 6, 3.5], ["Milo Tran", 6, 3.0],
 ].map(([name, club_team, price], i) => ({
   ...base,
   id: `p${i}`,
@@ -59,4 +61,13 @@ export const DEMO_USERS: Database["public"]["Functions"]["admin_list_users"]["Re
   { id: "u2", email: "sam@example.com", display_name: "Sam Carter", team_name: null, role: "user", joined_at: null, created_at: now, last_sign_in_at: now, is_test_data: false },
   { id: "u3", email: "priya@example.com", display_name: "Priya Shah", team_name: "Net Gains", role: "user", joined_at: now, created_at: now, last_sign_in_at: now, is_test_data: false },
   { id: "u4", email: "test-manager-01@example.invalid", display_name: "Alex Fern", team_name: "Grand Slammers", role: "user", joined_at: now, created_at: now, last_sign_in_at: null, is_test_data: true },
+];
+
+/** Demo squad for the dev user: 4 starters + bench, captain and vice-captain. */
+export const DEMO_SQUAD_PICKS = [
+  { position: 1, player_id: "p1", is_captain: true, is_vice_captain: false },
+  { position: 2, player_id: "p3", is_captain: false, is_vice_captain: true },
+  { position: 3, player_id: "p4", is_captain: false, is_vice_captain: false },
+  { position: 4, player_id: "p12", is_captain: false, is_vice_captain: false },
+  { position: 5, player_id: "p7", is_captain: false, is_vice_captain: false },
 ];

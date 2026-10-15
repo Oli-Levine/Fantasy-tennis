@@ -21,15 +21,13 @@ export function StatsHeader({
 }) {
   return (
     <div className={cn("border-b border-border pb-4", className)}>
-      {(title || actions) && (
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {eyebrow && <div className="mb-1">{eyebrow}</div>}
-            {title && <h2 className="truncate text-xl leading-tight">{title}</h2>}
-          </div>
+      {(eyebrow || actions) && (
+        <div className="mb-1 flex min-h-9 items-center justify-between gap-3">
+          <div className="min-w-0">{eyebrow}</div>
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       )}
+      {title && <h2 className="mb-4 text-xl leading-tight break-words">{title}</h2>}
       <dl
         className="grid gap-x-2 gap-y-3"
         style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}

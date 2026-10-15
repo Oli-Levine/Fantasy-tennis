@@ -8,6 +8,8 @@ describe("formatPrice", () => {
     expect(formatPrice(35)).toBe("£35.0m");
     expect(formatPrice(0)).toBe("£0.0m");
     expect(formatPrice(4.45)).toBe("£4.5m");
+    expect(formatPrice(-0.5)).toBe("−£0.5m");
+    expect(formatPrice(-0.04)).toBe("£0.0m");
   });
 });
 

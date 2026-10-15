@@ -5,7 +5,7 @@ import type { Gameweek } from "@/lib/database.types";
 import { devAuthBypass } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { nextDeadline, toLondonDateInputValue } from "@/lib/time";
-import { DEMO_GAMEWEEKS } from "../dev-fixtures";
+import { DEMO_GAMEWEEKS } from "@/lib/dev-fixtures";
 import { GameweeksManager } from "./gameweeks-manager";
 
 export const metadata: Metadata = { title: "Gameweeks · Admin" };

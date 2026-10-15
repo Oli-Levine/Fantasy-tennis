@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
-import { Users } from "lucide-react";
-import { EmptyState } from "@/components/app/empty-state";
-import { PageHeader } from "@/components/app/page-header";
+import { requireMember } from "@/lib/auth";
+import { loadTeamData } from "@/lib/team-data";
+import { TeamBuilder } from "./team-builder";
 
 export const metadata: Metadata = { title: "Team" };
 
-export default function TeamPage() {
-  return (
-    <>
-      <PageHeader title="Team" subtitle="Pick 4 starters and 1 bench player within £35.0m." />
-      <EmptyState
-        icon={Users}
-        title="Squad picking is coming soon"
-        description="Once players are added you'll build your squad, choose a captain and play chips here."
-      />
-    </>
-  );
+export default async function TeamPage() {
+  const { user, profile } = await requireMember();
+  const data = await loadTeamData(user.id);
+
+  // Remount the builder whenever the saved squad changes, so it starts from the server's copy.
+  const savedKey = data.picks.map((p) => `${p.position}:${p.player_id}:${+p.is_captain}${+p.is_vice_captain}`).join("|");
+
+  return <TeamBuilder key={savedKey} teamName={profile.team_name} {...data} />;
 }

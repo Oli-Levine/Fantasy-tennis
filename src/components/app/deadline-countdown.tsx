@@ -1,7 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { formatCountdown, nextDeadline } from "@/lib/time";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import { formatCountdown } from "@/lib/time";
 
 function subscribe(onTick: () => void) {
   const id = setInterval(onTick, 1000);
@@ -10,15 +11,29 @@ function subscribe(onTick: () => void) {
 const currentSecond = () => Math.floor(Date.now() / 1000);
 const serverSecond = () => null;
 
-/** Live countdown to the next Tuesday 21:00 UK deadline. */
-export function DeadlineCountdown() {
+/**
+ * Live countdown to a gameweek deadline. When it reaches zero the page is
+ * refreshed, so it moves on to the next gameweek (and the team gets locked).
+ */
+export function DeadlineCountdown({ deadline }: { deadline: string | null }) {
+  const router = useRouter();
   const second = useSyncExternalStore(subscribe, currentSecond, serverSecond);
-  if (second === null) return <span aria-hidden="true">–</span>;
+  const target = deadline ? new Date(deadline).getTime() : null;
+  const expired = target != null && second != null && second * 1000 >= target;
+  const refreshed = useRef(false);
 
-  const now = new Date(second * 1000);
+  useEffect(() => {
+    if (expired && !refreshed.current) {
+      refreshed.current = true;
+      router.refresh();
+    }
+  }, [expired, router]);
+
+  if (target == null) return <span>–</span>;
+  if (second === null) return <span aria-hidden="true">–</span>;
   return (
-    <time dateTime={nextDeadline(now).toISOString()} suppressHydrationWarning>
-      {formatCountdown(nextDeadline(now).getTime() - now.getTime())}
+    <time dateTime={deadline!} suppressHydrationWarning>
+      {expired ? "Locked" : formatCountdown(target - second * 1000)}
     </time>
   );
 }

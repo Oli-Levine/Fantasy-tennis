@@ -7,7 +7,7 @@ import { devAuthBypass } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { formatLondonDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { DEMO_GAMEWEEKS, DEMO_PLAYERS, DEMO_RULES, DEMO_USERS } from "./dev-fixtures";
+import { DEMO_GAMEWEEKS, DEMO_PLAYERS, DEMO_RULES, DEMO_USERS } from "@/lib/dev-fixtures";
 import { JoinCodeCard } from "./join-code-card";
 import { TestDataCard } from "./test-data-card";
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { devAuthBypass } from "@/lib/env";
 import type { Player } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_PLAYERS } from "../dev-fixtures";
+import { DEMO_PLAYERS } from "@/lib/dev-fixtures";
 import { PlayersManager } from "./players-manager";
 
 export const metadata: Metadata = { title: "Players · Admin" };

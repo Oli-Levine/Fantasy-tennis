@@ -14,6 +14,7 @@ const STUB = sqlFile("tests/supabase-stub.sql");
 const SCHEMA = sqlFile("migrations/0001_schema.sql");
 const SECURITY = sqlFile("migrations/0002_security.sql");
 const ADMIN_TOOLS = sqlFile("migrations/0003_admin.sql");
+const SQUADS = sqlFile("migrations/0004_squads.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -22,6 +23,7 @@ const ADMIN = "22222222-2222-4222-8222-222222222222";
 const MEMBER = "33333333-3333-4333-8333-333333333333";
 const OUTSIDER = "44444444-4444-4444-8444-444444444444"; // signed in, never entered the code
 const FAKE_MANAGER_1 = "00000000-0000-4000-a000-000000000001";
+const PICKER = "55555555-5555-4555-8555-555555555555"; // picks a squad in the Phase 4 tests
 
 let db: PGlite;
 
@@ -57,6 +59,7 @@ beforeAll(async () => {
     await db.exec(SCHEMA);
     await db.exec(SECURITY);
     await db.exec(ADMIN_TOOLS);
+    await db.exec(SQUADS);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
@@ -370,6 +373,129 @@ describe("admin tools", () => {
     await expect(as(MEMBER, `select * from public.admin_list_users()`)).rejects.toThrow(/Admins only/);
     await expect(as(MEMBER, `select public.admin_generate_gameweeks('2027-01-05', 1)`)).rejects.toThrow(/Admins only/);
     await expect(as(MEMBER, `select public.admin_test_data_counts()`)).rejects.toThrow(/Admins only/);
+  });
+});
+
+describe("squads and the deadline lock", () => {
+  type Pick = { position: number; player_id: string; is_captain: boolean; is_vice_captain: boolean };
+  let cheap: string[]; // 10 cheapest fake players
+  let gameweekId: number;
+
+  const squad = (ids: string[], captain = 1, vice = 2): Pick[] =>
+    ids.map((player_id, i) => ({ position: i + 1, player_id, is_captain: i + 1 === captain, is_vice_captain: i + 1 === vice }));
+  const save = (picks: unknown, uid = PICKER) => as(uid, `select public.save_squad($1::jsonb) as r`, [JSON.stringify(picks)]);
+  const myPicks = async () =>
+    (await db.query<Pick>(`select position, player_id, is_captain, is_vice_captain from public.squad_picks where user_id = $1 order by position`, [PICKER])).rows;
+
+  beforeAll(async () => {
+    await signUp(PICKER, "picker@example.com", "Pat Picker");
+    await as(PICKER, `select public.join_club($1)`, [await joinCode()]);
+    await as(PICKER, `update public.profiles set team_name = 'Pick n Mix' where id = $1`, [PICKER]);
+    cheap = (await db.query<{ id: string }>(`select id from public.players where is_test_data order by price, name limit 10`)).rows.map((r) => r.id);
+  });
+
+  it("saves a valid squad of 4 starters and a bench player", async () => {
+    expect(await save(squad(cheap.slice(0, 5)))).toEqual([{ r: { changed_players: true } }]);
+    const picks = await myPicks();
+    expect(picks.map((p) => p.player_id)).toEqual(cheap.slice(0, 5));
+    expect(picks.find((p) => p.is_captain)?.position).toBe(1);
+  });
+
+  it("rejects squads that break the rules", async () => {
+    await expect(save(squad(cheap.slice(0, 4)))).rejects.toThrow(/exactly 5 players/);
+    await expect(save(squad([...cheap.slice(0, 4), cheap[0]]))).rejects.toThrow(/only be picked once/);
+    await expect(save(squad(cheap.slice(0, 5), 5, 1))).rejects.toThrow(/captain/); // captain on the bench
+    await expect(save(squad(cheap.slice(0, 5), 1, 1))).rejects.toThrow(/captain/); // same player twice
+    const pricey = (await db.query<{ id: string }>(`select id from public.players order by price desc limit 5`)).rows.map((r) => r.id);
+    await expect(save(squad(pricey))).rejects.toThrow(/over the £35.0m budget/);
+  });
+
+  it("won't add an unavailable player, but keeps one already in the squad", async () => {
+    await db.query(`update public.players set is_active = false where id = $1`, [cheap[5]]);
+    await expect(save(squad([...cheap.slice(0, 4), cheap[5]]))).rejects.toThrow(/is unavailable/);
+    await db.query(`update public.players set is_active = false where id = $1`, [cheap[0]]);
+    await expect(save(squad(cheap.slice(0, 5), 2, 3))).resolves.toBeTruthy(); // line-up change only
+    await db.query(`update public.players set is_active = true where id = any($1)`, [[cheap[0], cheap[5]]]);
+  });
+
+  it("only lets members save, and still blocks direct writes", async () => {
+    await expect(save(squad(cheap.slice(0, 5)), EARLY_USER)).rejects.toThrow(/Join the club/);
+    await expect(as(PICKER, `delete from public.squad_picks where user_id = $1`, [PICKER])).rejects.toThrow(/permission denied/);
+  });
+
+  it("snapshots complete squads when the deadline passes and locks the gameweek", async () => {
+    const [gw] = await as<{ id: number }>(
+      ADMIN,
+      `insert into public.gameweeks (number, deadline) values (500, now() + interval '1 hour') returning id`,
+    );
+    gameweekId = gw.id;
+    const [blank] = await as<{ id: number }>(
+      ADMIN,
+      `insert into public.gameweeks (number, deadline, is_blank) values (501, now() - interval '2 hours', true) returning id`,
+    );
+
+    await as(PICKER, `select public.sync_gameweeks()`);
+    expect(await as(PICKER, `select status from public.gameweeks where id = $1`, [gameweekId])).toEqual([{ status: "open" }]);
+
+    // Deadline passes. Nobody needs to be online: the next sync/save locks it.
+    await as(ADMIN, `update public.gameweeks set deadline = now() - interval '1 second' where id = $1`, [gameweekId]);
+    await as(MEMBER, `select public.sync_gameweeks()`);
+
+    const { rows: gws } = await db.query<{ id: number; status: string }>(
+      `select id, status from public.gameweeks where id in ($1, $2) order by id`,
+      [gameweekId, blank.id],
+    );
+    expect(gws).toEqual([
+      { id: gameweekId, status: "locked" },
+      { id: blank.id, status: "open" }, // blank weeks are never locked or scored
+    ]);
+
+    const snapshot = await as<Pick>(
+      PICKER,
+      `select position, player_id, is_captain, is_vice_captain from public.gameweek_picks
+       where user_id = $1 and gameweek_id = $2 order by position`,
+      [PICKER, gameweekId],
+    );
+    expect(snapshot).toEqual(await myPicks());
+
+    const { rows: entries } = await db.query<{ user_id: string }>(`select user_id from public.gameweek_entries where gameweek_id = $1`, [gameweekId]);
+    expect(entries.map((e) => e.user_id)).toContain(PICKER);
+    expect(entries.filter((e) => e.user_id.startsWith("00000000-0000-4000-a000"))).toHaveLength(10); // fake managers
+    expect(entries.map((e) => e.user_id)).not.toContain(MEMBER); // no complete squad, so no entry
+  });
+
+  it("applies changes after the deadline to the next gameweek, leaving the snapshot alone", async () => {
+    const before = await as(PICKER, `select * from public.gameweek_picks where user_id = $1 and gameweek_id = $2 order by position`, [PICKER, gameweekId]);
+    await save(squad(cheap.slice(0, 5), 3, 4)); // new captain: fine
+    expect((await myPicks()).find((p) => p.is_captain)?.position).toBe(3);
+    expect(await as(PICKER, `select * from public.gameweek_picks where user_id = $1 and gameweek_id = $2 order by position`, [PICKER, gameweekId])).toEqual(before);
+  });
+
+  it("treats player changes after the first lock as transfers (coming in Phase 5)", async () => {
+    await expect(save(squad([...cheap.slice(0, 4), cheap[6]]))).rejects.toThrow(/count as transfers/);
+  });
+
+  it("locks the old squad first when someone saves just after a deadline", async () => {
+    const [gw2] = await as<{ id: number }>(
+      ADMIN,
+      `insert into public.gameweeks (number, deadline) values (502, now() - interval '1 second') returning id`,
+    );
+    // Captain is currently position 3. Nobody has synced since the deadline passed.
+    await save(squad(cheap.slice(0, 5), 4, 1));
+    const snapshot = await as<Pick>(
+      PICKER,
+      `select position, is_captain from public.gameweek_picks where user_id = $1 and gameweek_id = $2 and is_captain`,
+      [PICKER, gw2.id],
+    );
+    expect(snapshot).toEqual([{ position: 3, is_captain: true }]); // the deadline-time squad
+    expect((await myPicks()).find((p) => p.is_captain)?.position).toBe(4); // the change applies next week
+  });
+
+  it("doesn't snapshot a gameweek twice", async () => {
+    await db.query(`update public.gameweeks set status = 'open' where id = $1`, [gameweekId]);
+    await as(PICKER, `select public.sync_gameweeks()`);
+    const { rows } = await db.query(`select count(*)::int as n from public.gameweek_picks where user_id = $1 and gameweek_id = $2`, [PICKER, gameweekId]);
+    expect(rows).toEqual([{ n: 5 }]);
   });
 });
 

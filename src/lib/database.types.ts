@@ -163,6 +163,13 @@ export type Database = {
       set_join_code: { Args: { p_code: string }; Returns: string };
       set_user_role: { Args: { p_user_id: Uuid; p_role: Role }; Returns: undefined };
       remove_user: { Args: { p_user_id: Uuid }; Returns: undefined };
+      sync_gameweeks: { Args: never; Returns: number };
+      save_squad: {
+        Args: {
+          p_picks: { position: number; player_id: Uuid; is_captain: boolean; is_vice_captain: boolean }[];
+        };
+        Returns: { changed_players: boolean };
+      };
       admin_generate_gameweeks: { Args: { p_first_date: string; p_weeks: number }; Returns: number };
       admin_list_users: {
         Args: never;
