@@ -116,13 +116,13 @@ Stats page, mini-leagues, notifications, automatic price changes.
 ## 11. Current setup status
 The owner is building and deploying a website for the first time, so explain each setup step in plain language and say exactly what to click or paste.
 
-- **Device:** the owner uses Claude Code on an iPad (cloud sessions), not a laptop, and can't run anything locally. Everything is tested on Vercel deployment links. Push early so progress is visible there.
-- **GitHub:** repo is `https://github.com/Oli-Levine/Fantasy-tennis`. Work in and push to this repo.
-- **Database setup:** Supabase is not reachable from the cloud session, so write the schema, RLS policies and seed data as SQL files in the repo, and tell the owner exactly what to paste into the Supabase **SQL Editor**, in what order.
-- **Data:** only load **fake test data** (players, managers and scoring rules). The owner will enter the real players, prices, photos and rules through the Admin page, so the fake data must be easy to delete in one go.
-- **Supabase:** the project is created. The project URL and anon key live in `.env.local` (gitignored) and in Vercel environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). They must never be written into this file or committed. No secret (service-role) key is in use; if one is needed (e.g. for seeding), ask the owner to add it themselves.
-- **Vercel:** account exists. Once code is on GitHub, the owner imports the repo in Vercel and adds the environment variables before clicking Deploy. If work is pushed to a branch other than `main`, explain how to merge it so the main site updates.
-- **GitHub Secrets:** not needed — keys live in `.env.local` and Vercel environment variables. Flag it if that changes.
+- **Device:** the owner uses Claude Code on an iPad (cloud sessions), not a laptop, and can't run anything locally. Everything is tested on the Vercel deployment. Push early so progress is visible there.
+- **GitHub:** repo is `https://github.com/Oli-Levine/Fantasy-tennis`. Work on and push straight to `main` (agreed with the owner: Vercel deploys `main`, and there's no merge step to manage on an iPad).
+- **Vercel:** ✅ imported and deploying `main` automatically, with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set.
+- **Google sign-in:** ✅ set up in Google Cloud and Supabase, and working.
+- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
+- **Keys:** the project URL and anon key live only in Vercel (and an uncommitted `.env.local`). They must never be written into this file or committed. Tests, builds and screenshots don't need them. No service-role key is in use; if one is ever needed, ask the owner to add it in Vercel themselves.
+- **GitHub Secrets:** not needed.
 
 ---
 
@@ -131,10 +131,33 @@ The owner is building and deploying a website for the first time, so explain eac
 - **shadcn/ui** — the shadcn registry is blocked from cloud sessions, so components in `src/components/ui` are hand-written from the shadcn source using the `radix-ui` package. Add new ones the same way.
 - **Theme** — use the tokens in `src/app/globals.css` (`bg-primary`, `text-gold`, `rounded-card`, `rounded-panel`, `shadow-soft`, `font-heading`, `h-nav`, `px-gutter`, `max-w-content`); don't hard-code colours.
 - **Time** — use `src/lib/time.ts` (Europe/London via `@date-fns/tz`) for anything deadline-related.
-- **Auth** — `requireUser()` in `src/lib/auth.ts` for server components. `DEV_SKIP_AUTH=1` with `npm run dev` fakes a signed-in user for local screenshots; it is inert in production builds.
+- **Auth** — `getViewer()` (signed-in user + profile), `requireMember()` and `requireAdmin()` in `src/lib/auth.ts` for server components and actions. `DEV_SKIP_AUTH=1` with `npm run dev` fakes a signed-in user for local screenshots; it is inert in production builds.
 - **Database** — SQL lives in `supabase/` (see `supabase/README.md`). Add new migrations as `supabase/migrations/000N_*.sql`, keep them re-runnable, wrap them in `begin; … commit;`, update `src/lib/database.types.ts` by hand, and extend `supabase/tests/database.test.ts` (PGlite + `supabase-stub.sql`) to cover new RLS rules. Fake data is marked `is_test_data` and removed by `private.delete_test_data()`. Supabase runs API requests with **pg-safeupdate**: every `UPDATE`/`DELETE` (including inside functions/triggers) needs a `WHERE` clause (`where true` if you really mean all rows); `supabase/tests/sql-lint.test.ts` enforces this because PGlite doesn't.
 - **Access model** — `profiles.joined_at` set = member (entered the join code); `role = 'admin'` = admin. `requireMember()` / `requireAdmin()` in `src/lib/auth.ts` gate the UI; RLS + security-definer functions enforce it in the database. Squads, chips, transfers and snapshots have no direct-write grants: change them only through security-definer functions that check deadlines and budget.
-- **Admin UI** — pages under `src/app/(app)/admin/*` load data in the server page and pass it to a `*-manager.tsx` client component; writes go through `actions.ts` server actions that call `requireAdmin()` and return `ActionResult` (`src/lib/action-result.ts`), then `revalidatePath("/", "layout")`. Forms open in `Dialog` (a bottom sheet on phones); destructive actions use `ConfirmDialog`. Player photos are cropped/compressed in the browser (`src/lib/image.ts`) and uploaded straight to Storage at `player-photos/<player id>/<timestamp>.jpg`. In dev bypass mode the pages use `admin/dev-fixtures.ts`.
+- **Admin UI** — pages under `src/app/(app)/admin/*` load data in the server page and pass it to a `*-manager.tsx` client component; writes go through `actions.ts` server actions that call `requireAdmin()` and return `ActionResult` (`src/lib/action-result.ts`), then `revalidatePath("/", "layout")`. Forms open in `Dialog` (a bottom sheet on phones); destructive actions use `ConfirmDialog`. Player photos are cropped/compressed in the browser (`src/lib/image.ts`) and uploaded straight to Storage at `player-photos/<player id>/<timestamp>.jpg`. In dev bypass mode pages use sample data from `src/lib/dev-fixtures.ts`.
 - **Squads & deadline lock** — squad edits are pure functions in `src/lib/squad.ts` (instant UI) and are saved via `public.save_squad()`, which first runs `private.lock_due_gameweeks()`: every non-blank open gameweek past its deadline gets a snapshot (`gameweek_entries` + `gameweek_picks`) of each complete squad and is marked locked. Since all squad writes run the lock first, snapshots always reflect the squad at the deadline without a cron job. Pages call `sync_gameweeks()` via `loadTeamData()` (`src/lib/team-data.ts`). Until transfers exist (Phase 5), `save_squad` refuses player changes once a manager has any locked entry; line-up/armband changes are always allowed.
 - **Dates** — format with `formatLondonDateTime` (built from parts so server and browser render identical text; plain `Intl` output differs between Node and Chrome and breaks hydration).
 - **QA** — `DEV_SKIP_AUTH=1 npm run dev` (add `DEV_PROFILE=outsider|joined|member` to preview onboarding states; default is an admin), then `BASE_URL=http://localhost:3000 CHROMIUM_PATH=/opt/pw-browsers/chromium npm run screenshots`.
+
+---
+
+## 13. Progress log & handover (keep this up to date at the end of each phase)
+
+**Done and tested by the owner on their phone:** Phases 1–4.
+- Phase 1: app shell, Google sign-in, theme tokens, bottom nav, Vercel deploy.
+- Phase 2: schema + RLS (`0001`, `0002`), join-code onboarding (`/join`: code → team name + display name), fake seed data.
+- Phase 3: Admin hub, Players (photos, CSV import), Scoring rules (archive instead of delete when used), Gameweeks (generator, blank weeks, renumbering), Users (promote/remove), "Delete test data" button (`0003`).
+- Phase 4: Team page (squad picking, auto-pick/clear, captain/VC, bench swaps, player pool with search/filter/sort and greyed-out reasons, save bar), Home shows the real squad, deadline lock + snapshots (`0004`). The owner has generated weekly gameweeks; the first real deadline is **Tue 20 Oct 2026, 21:00**.
+
+**How each phase ends:** run lint, typecheck, `npm test` and `npm run build`; take 375px screenshots with Playwright and fix layout issues; commit and push to `main`; then reply with a short summary, any SQL file(s) the owner must run (with the click-by-click steps above), and a numbered "what to test on your phone" list.
+
+**Next: Phase 5 (transfers, hits, chips).** Design notes, so it fits what exists:
+- `public.save_squad()` currently *refuses* player changes once a manager has any `gameweek_entries` row (look for "count as transfers"). Phase 5 replaces that block with real transfer rules. New managers (no entries yet) keep unlimited free changes.
+- Count transfers for the upcoming gameweek as the players in the current squad who aren't in the manager's latest snapshot (`gameweek_picks` of their most recent entry). This makes undoing a transfer free automatically. Free transfers per gameweek and the hit size are in `club_settings` (`free_transfers_per_gameweek` = 1, `transfer_hit_points` = 5). Log swaps in `public.transfers` and fill `gameweek_entries.transfers_made` / `transfer_hit` in `private.lock_due_gameweeks()` when it snapshots.
+- Chips go in `public.chip_plays` (unique per user+chip = once a season; unique per user+gameweek = one per week). Play and cancel only before the deadline, through security-definer RPCs. `lock_due_gameweeks()` already copies the chip into `gameweek_entries.chip`.
+  - **Wildcard** and **Free Hit**: no hits that week.
+  - **Free Hit**: after locking that gameweek, restore the manager's `squad_picks` from their previous snapshot.
+  - **Triple Captain**: scoring only (Phase 6).
+- Team page UI still to add: a transfers counter ("1 free · 2 made → −5 pts"), a preview/confirm sheet before saving (players out/in, new budget, hit), and a chips dropdown with a confirm modal and the chips remaining. Add a chip banner on Home.
+- Extend `supabase/tests/database.test.ts` (it already has a `PICKER` manager with a locked snapshot in the Phase 4 tests) and `src/lib/squad.test.ts`.
+
