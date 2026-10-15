@@ -53,14 +53,45 @@ export function formatCountdown(msRemaining: number): string {
   return `${seconds}s`;
 }
 
-/** e.g. "Tue 21 Oct, 21:00" in UK time. */
+/**
+ * e.g. "Tue 21 Oct, 21:00" in UK time. Built from parts so the server (Node)
+ * and browsers always produce identical text.
+ */
 export function formatLondonDateTime(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: GAME_TIME_ZONE,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: GAME_TIME_ZONE,
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .map((p) => [p.type, p.value]),
+  );
+  return `${parts.weekday} ${parts.day} ${parts.month}, ${parts.hour}:${parts.minute}`;
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** A date as the value for <input type="datetime-local">, in UK time. */
+export function toLondonInputValue(date: Date): string {
+  const d = new TZDate(date.getTime(), GAME_TIME_ZONE);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A date as the value for <input type="date">, in UK time. */
+export function toLondonDateInputValue(date: Date): string {
+  return toLondonInputValue(date).slice(0, 10);
+}
+
+/** Reads an <input type="datetime-local"> value as UK time. Null if invalid. */
+export function fromLondonInputValue(value: string): Date | null {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m.map(Number);
+  const result = new TZDate(y, mo - 1, d, h, mi, 0, GAME_TIME_ZONE);
+  return Number.isNaN(result.getTime()) ? null : new Date(result.getTime());
 }

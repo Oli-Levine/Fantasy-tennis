@@ -13,6 +13,7 @@ const sqlFile = (path: string) => readFileSync(fileURLToPath(new URL(`../${path}
 const STUB = sqlFile("tests/supabase-stub.sql");
 const SCHEMA = sqlFile("migrations/0001_schema.sql");
 const SECURITY = sqlFile("migrations/0002_security.sql");
+const ADMIN_TOOLS = sqlFile("migrations/0003_admin.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -55,6 +56,7 @@ beforeAll(async () => {
   for (let i = 0; i < 2; i++) {
     await db.exec(SCHEMA);
     await db.exec(SECURITY);
+    await db.exec(ADMIN_TOOLS);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
@@ -301,6 +303,73 @@ describe("security: admins", () => {
     await as(ADMIN, `select public.remove_user($1)`, [OUTSIDER]);
     const { rows } = await db.query(`select count(*)::int as n from auth.users where id = $1`, [OUTSIDER]);
     expect(rows).toEqual([{ n: 0 }]);
+  });
+});
+
+describe("admin tools", () => {
+  const numbersInDeadlineOrder = async () =>
+    (
+      await db.query<{ number: number; expected: number }>(
+        `select number, row_number() over (order by deadline, id)::int as expected from public.gameweeks order by deadline`,
+      )
+    ).rows;
+
+  it("generates weekly Tuesday 21:00 UK deadlines across the clock change", async () => {
+    const [{ created }] = await as<{ created: number }>(
+      ADMIN,
+      `select public.admin_generate_gameweeks('2026-10-20', 3) as created`,
+    );
+    expect(created).toBe(3);
+    const { rows } = await db.query<{ deadline: Date }>(
+      `select deadline from public.gameweeks where deadline >= '2026-10-20' order by deadline`,
+    );
+    expect(rows.map((r) => new Date(r.deadline).toISOString())).toEqual([
+      "2026-10-20T20:00:00.000Z", // BST
+      "2026-10-27T21:00:00.000Z", // GMT after the clocks go back
+      "2026-11-03T21:00:00.000Z",
+    ]);
+  });
+
+  it("skips deadlines that already exist and keeps numbers in deadline order", async () => {
+    expect(await as(ADMIN, `select public.admin_generate_gameweeks('2026-11-03', 2) as created`)).toEqual([
+      { created: 1 },
+    ]);
+    // An earlier week slots in and everything is renumbered 1, 2, 3…
+    await as(ADMIN, `select public.admin_generate_gameweeks('2026-09-29', 1)`);
+    const rows = await numbersInDeadlineOrder();
+    expect(rows.map((r) => r.number)).toEqual(rows.map((r) => r.expected));
+  });
+
+  it("renumbers when a deadline is moved", async () => {
+    await as(
+      ADMIN,
+      `update public.gameweeks set deadline = '2026-12-01 21:00+00' where deadline = '2026-09-29 20:00+00'`,
+    );
+    const rows = await numbersInDeadlineOrder();
+    expect(rows.map((r) => r.number)).toEqual(rows.map((r) => r.expected));
+  });
+
+  it("only deletes gameweeks that haven't been used", async () => {
+    await expect(
+      as(ADMIN, `delete from public.gameweeks where status = 'published'`),
+    ).rejects.toThrow(/in use/);
+    const deleted = await as(ADMIN, `delete from public.gameweeks where deadline = '2026-12-01 21:00+00' returning id`);
+    expect(deleted).toHaveLength(1);
+    const rows = await numbersInDeadlineOrder();
+    expect(rows.map((r) => r.number)).toEqual(rows.map((r) => r.expected));
+  });
+
+  it("lists users with emails and counts test data, for admins only", async () => {
+    const users = await as<{ email: string; is_test_data: boolean }>(ADMIN, `select * from public.admin_list_users()`);
+    expect(users.map((u) => u.email)).toContain("admin@example.com");
+    expect(users.filter((u) => u.is_test_data)).toHaveLength(10);
+    expect(await as(ADMIN, `select public.admin_test_data_counts() as c`)).toEqual([
+      { c: { players: 40, scoring_rules: 8, managers: 10 } },
+    ]);
+
+    await expect(as(MEMBER, `select * from public.admin_list_users()`)).rejects.toThrow(/Admins only/);
+    await expect(as(MEMBER, `select public.admin_generate_gameweeks('2027-01-05', 1)`)).rejects.toThrow(/Admins only/);
+    await expect(as(MEMBER, `select public.admin_test_data_counts()`)).rejects.toThrow(/Admins only/);
   });
 });
 

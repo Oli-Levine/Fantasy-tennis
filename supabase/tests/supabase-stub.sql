@@ -26,7 +26,8 @@ create table auth.users (
   confirmation_token varchar(255),
   recovery_token varchar(255),
   email_change_token_new varchar(255),
-  email_change varchar(255)
+  email_change varchar(255),
+  last_sign_in_at timestamptz
 );
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid

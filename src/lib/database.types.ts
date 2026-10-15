@@ -163,6 +163,25 @@ export type Database = {
       set_join_code: { Args: { p_code: string }; Returns: string };
       set_user_role: { Args: { p_user_id: Uuid; p_role: Role }; Returns: undefined };
       remove_user: { Args: { p_user_id: Uuid }; Returns: undefined };
+      admin_generate_gameweeks: { Args: { p_first_date: string; p_weeks: number }; Returns: number };
+      admin_list_users: {
+        Args: never;
+        Returns: {
+          id: Uuid;
+          email: string;
+          display_name: string;
+          team_name: string | null;
+          role: Role;
+          joined_at: Timestamp | null;
+          created_at: Timestamp;
+          last_sign_in_at: Timestamp | null;
+          is_test_data: boolean;
+        }[];
+      };
+      admin_test_data_counts: {
+        Args: never;
+        Returns: { players: number; scoring_rules: number; managers: number };
+      };
       admin_delete_test_data: {
         Args: never;
         Returns: { players: number; scoring_rules: number; managers: number };
