@@ -120,7 +120,7 @@ The owner is building and deploying a website for the first time, so explain eac
 - **GitHub:** repo is `https://github.com/Oli-Levine/Fantasy-tennis`. Work on and push straight to `main` (agreed with the owner: Vercel deploys `main`, and there's no merge step to manage on an iPad).
 - **Vercel:** ✅ imported and deploying `main` automatically, with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set.
 - **Google sign-in:** ✅ set up in Google Cloud and Supabase, and working.
-- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` (`0005_transfers_chips.sql` from Phase 5 and `0006_results.sql` from Phase 6 — confirm the owner has run them), `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
+- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
 - **Keys:** the project URL and anon key live only in Vercel (and an uncommitted `.env.local`). They must never be written into this file or committed. Tests, builds and screenshots don't need them. No service-role key is in use; if one is ever needed, ask the owner to add it in Vercel themselves.
 - **GitHub Secrets:** not needed.
 
@@ -143,7 +143,7 @@ The owner is building and deploying a website for the first time, so explain eac
 
 ## 13. Progress log & handover (keep this up to date at the end of each phase)
 
-**Done and tested by the owner on their phone:** Phases 1–4.
+**Done and tested by the owner on their phone:** Phases 1–6.
 - Phase 1: app shell, Google sign-in, theme tokens, bottom nav, Vercel deploy.
 - Phase 2: schema + RLS (`0001`, `0002`), join-code onboarding (`/join`: code → team name + display name), fake seed data.
 - Phase 3: Admin hub, Players (photos, CSV import), Scoring rules (archive instead of delete when used), Gameweeks (generator, blank weeks, renumbering), Users (promote/remove), "Delete test data" button (`0003`).
@@ -151,13 +151,13 @@ The owner is building and deploying a website for the first time, so explain eac
 
 **How each phase ends:** run lint, typecheck, `npm test` and `npm run build`; take 375px screenshots with Playwright and fix layout issues; commit and push to `main`; then reply with a short summary, any SQL file(s) the owner must run (with the click-by-click steps above), and a numbered "what to test on your phone" list.
 
-- Phase 5 (built, awaiting owner testing): transfers, hits and chips (`0005_transfers_chips.sql`).
+- Phase 5: transfers, hits and chips (`0005_transfers_chips.sql`).
   - Transfers are counted against the manager's **baseline** = latest `gameweek_entries` before the coming deadline whose chip isn't `free_hit` (`private.baseline_gameweek`). Undoing a swap is therefore free. No baseline = new manager = unlimited free changes. `public.get_transfer_state()` returns the live count/hit; `transferSummary` in `src/lib/squad.ts` mirrors it for the UI.
   - `private.lock_due_gameweeks()` now also fills `transfers_made` / `transfer_hit`, logs paired swaps in `public.transfers` (via `private.gameweek_moves`), reverts Free Hit squads to the baseline, and refunds chips that had no effect (no complete squad, or the week was later marked blank). It only processes entries it newly created, so re-running is safe.
   - Chips: `public.play_chip(chip)` / `public.cancel_chip(chip)` act on the coming gameweek only. Wildcard/Free Hit are refused for managers with no baseline (changes are already free). Triple Captain is only stored; scoring is Phase 6 (captain ×3, or VC ×3 if the captain doesn't play).
   - UI: transfers bar, save-bar summary and `transfer-preview.tsx` sheet (shown only when players change after the first lock); `chips-card.tsx` (dropdown → confirm modal, remaining chips); gold chip banner and "TC" badge on Home. `DEV_CHIP=wildcard|free_hit|triple_captain` previews an active chip in dev bypass mode.
 
-- Phase 6 (built, awaiting owner testing): results entry, scoring, publishing, league (`0006_results.sql`).
+- Phase 6: results entry, scoring, publishing, league (`0006_results.sql`).
   - **Scoring** is `src/lib/scoring.ts` (pure, tested in `scoring.test.ts`): player points = Σ rule points × count (all categories; "did not play" never removes points); manager = 4 starters + bench if any starter DNP, captain ×2 (×3 TC; VC gets it if the captain DNP; nobody if both DNP), minus `transfer_hit` (0 with Wildcard/Free Hit). Each gameweek is scored from its own snapshot.
   - **Storing points:** `src/lib/recalculate.ts` loads a gameweek's raw results + snapshots, runs `scoreGameweek`, and calls `public.admin_store_points()` (also publishes). It runs on Publish, on any save to a published gameweek, when a rule's points change (`recalculatePublished`), and when the Gameweeks editor sets a week to published.
   - **Results entry:** `/admin/results` (grid: sticky player column, DNP + tick/stepper per rule, "In a team" filter, Save draft / Publish / Save & recalculate). Raw results are replaced atomically by `public.admin_save_results()`, which only accepts locked/published non-blank weeks; zero counts aren't stored.
@@ -165,4 +165,10 @@ The owner is building and deploying a website for the first time, so explain eac
   - Home shows last published gameweek's *counted* points per card (captain ×2/×3, "Didn't play", "Subbed on") plus a summary link to the breakdown, via `loadLastScore()` in `src/lib/last-score.ts`. The Team page still shows each player's raw points (player form). `src/lib/scoring-input.ts` turns DB rows into scoring input; a DB test runs it end to end.
   - Known limit: `loadTeamData` reads `player_gameweeks` in one request (Supabase caps at 1000 rows), fine for ~25 weeks × 40 players; page it if the season grows.
 
-**Next: Phase 7 (Home polish, Rules page, PWA, final mobile QA).** See sections 1, 7 and 8. The Rules page's scoring table must be generated from `scoring_rules`; chip text can reuse `src/lib/chips.ts`.
+- Phase 7 (built, awaiting owner testing): Home polish, Rules page, PWA, mobile QA. No new SQL.
+  - **PWA:** `src/app/manifest.ts` (standalone, red theme), icons in `public/icons/` (192, 512, maskable 512) and `src/app/apple-icon.png` (180), rendered from an SVG with Playwright. No service worker on purpose: install works without one, and caching per-user pages would risk stale data. `src/components/app/install-prompt.tsx` on Home: Install button on Chrome/Android (`beforeinstallprompt`), Share → Add to Home Screen steps on iPhone/iPad; hidden when installed or dismissed (localStorage).
+  - **Rules page:** sections for squad, deadlines, captain/bench, transfers, chips (`CHIPS`), scoring and league. Budget/free transfers/hit come from `club_settings`; the scoring table is generated from active `scoring_rules`, split into on court (`match`) and off court (`other`).
+  - **Home:** next-deadline line, league snapshot (top 3 + you), install prompt. Skeleton `loading.tsx` for Team, League, League team, Rules and Admin (`src/components/app/skeletons.tsx`).
+  - `npm run screenshots` now covers every screen including the admin sub-pages and `/league/u3`.
+
+**All 7 phases are built.** Out of scope for now (section 9): stats page, mini-leagues, notifications, automatic price changes. Raw `rule_results` are kept for the future stats page.

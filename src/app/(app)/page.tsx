@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, Sparkles, Users } from "lucide-react";
+import { ChevronRight, Sparkles, Trophy, Users } from "lucide-react";
 import { DeadlineCountdown } from "@/components/app/deadline-countdown";
 import { EmptyState } from "@/components/app/empty-state";
+import { InstallPrompt } from "@/components/app/install-prompt";
 import { BenchCard, PlayerCard, type PlayerCardData } from "@/components/app/player-card";
 import { StatsHeader } from "@/components/app/stats-header";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import { BENCH_INDEX, fromPicks, isFull, round1, squadCost } from "@/lib/squad";
 import { ordinal } from "@/lib/format";
 import { loadLeague } from "@/lib/league-data";
 import { loadTeamData } from "@/lib/team-data";
+import { formatLondonDateTime } from "@/lib/time";
+import { cn } from "@/lib/utils";
 
 export default async function HomePage() {
   const { user, profile } = await requireMember();
@@ -97,6 +100,13 @@ export default async function HomePage() {
           ]}
         />
 
+        {nextGameweek && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            GW{nextGameweek.number} deadline:{" "}
+            <strong className="font-semibold text-foreground">{formatLondonDateTime(new Date(nextGameweek.deadline))}</strong>
+          </p>
+        )}
+
         {last && (
           <Link
             href={`/league/${user.id}?gw=${last.gameweekId}`}
@@ -156,6 +166,66 @@ export default async function HomePage() {
           />
         )}
       </section>
+
+      {league.latest && league.standings.length > 0 && (
+        <LeagueSnapshot rows={league.standings} userId={user.id} gameweekNumber={league.latest.number} />
+      )}
+
+      <InstallPrompt />
     </div>
+  );
+}
+
+/** Top 3, plus your own position if you're not in it. */
+function LeagueSnapshot({
+  rows,
+  userId,
+  gameweekNumber,
+}: {
+  rows: Awaited<ReturnType<typeof loadLeague>>["standings"];
+  userId: string;
+  gameweekNumber: number;
+}) {
+  const top = rows.slice(0, 3);
+  const mine = rows.find((r) => r.userId === userId);
+  const shown = mine && !top.includes(mine) ? [...top, mine] : top;
+  return (
+    <section className="rounded-panel bg-card p-4 shadow-soft">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-base">
+          <Trophy className="size-4 text-gold" />
+          League
+        </h2>
+        <span className="text-xs text-muted-foreground">After GW{gameweekNumber}</span>
+      </div>
+      <ol>
+        {shown.map((row, i) => (
+          <li key={row.userId}>
+            {i === 3 && <div className="my-1 text-center text-xs leading-none text-muted-foreground">⋯</div>}
+            <Link
+              href={`/league/${row.userId}`}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/60",
+                row.userId === userId && "bg-primary-soft/50",
+              )}
+            >
+              <span
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-full font-heading text-xs font-bold",
+                  row.rank <= 3 && row.total > 0 ? "bg-gold text-ink" : "bg-muted",
+                )}
+              >
+                {row.rank}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{row.teamName}</span>
+              <span className="font-heading text-sm font-semibold tabular-nums">{row.total}</span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+      <Button asChild variant="soft" size="sm" className="mt-2 w-full">
+        <Link href="/league">Full table</Link>
+      </Button>
+    </section>
   );
 }
