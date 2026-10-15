@@ -198,6 +198,22 @@ export type Database = {
       get_transfer_state: { Args: never; Returns: TransferState };
       play_chip: { Args: { p_chip: Chip }; Returns: { chip: Chip; gameweek_id: number } };
       cancel_chip: { Args: { p_chip: Chip }; Returns: undefined };
+      admin_save_results: {
+        Args: {
+          p_gameweek_id: number;
+          p_results: { player_id: Uuid; did_not_play: boolean; counts: Record<Uuid, number> }[];
+        };
+        Returns: number;
+      };
+      admin_store_points: {
+        Args: {
+          p_gameweek_id: number;
+          p_players: { player_id: Uuid; points: number }[];
+          p_entries: { user_id: Uuid; points: number }[];
+          p_publish: boolean;
+        };
+        Returns: undefined;
+      };
       admin_generate_gameweeks: { Args: { p_first_date: string; p_weeks: number }; Returns: number };
       admin_list_users: {
         Args: never;

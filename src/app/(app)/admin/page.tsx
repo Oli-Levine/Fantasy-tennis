@@ -38,7 +38,7 @@ export default async function AdminPage() {
       detail: o.nextDeadline ? `Next deadline ${formatLondonDateTime(new Date(o.nextDeadline))}` : `${o.gameweeks} scheduled`,
     },
     { href: "/admin/users", icon: UserCog, label: "Users", detail: `${o.members} members · promote or remove` },
-    { href: "#", icon: ClipboardList, label: "Results entry", detail: "Coming in a later update", soon: true },
+    { href: "/admin/results", icon: ClipboardList, label: "Results entry", detail: "Enter results, save drafts and publish points" },
   ];
 
   return (

@@ -16,6 +16,7 @@ const SECURITY = sqlFile("migrations/0002_security.sql");
 const ADMIN_TOOLS = sqlFile("migrations/0003_admin.sql");
 const SQUADS = sqlFile("migrations/0004_squads.sql");
 const TRANSFERS = sqlFile("migrations/0005_transfers_chips.sql");
+const RESULTS = sqlFile("migrations/0006_results.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -62,6 +63,7 @@ beforeAll(async () => {
     await db.exec(ADMIN_TOOLS);
     await db.exec(SQUADS);
     await db.exec(TRANSFERS);
+    await db.exec(RESULTS);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
@@ -654,6 +656,114 @@ describe("transfers and chips", () => {
     await passDeadline(gw);
     const { rows } = await db.query(`select count(*)::int as n from public.chip_plays where user_id = $1`, [MEMBER]);
     expect(rows).toEqual([{ n: 0 }]);
+  });
+});
+
+describe("results and publishing", () => {
+  let gameweekId: number; // a locked gameweek PICKER has a team in
+  let openId: number;
+  let rules: { id: string; type: string; points: number }[];
+  let picked: string[];
+
+  const saveResults = (results: unknown, uid = ADMIN, gw = gameweekId) =>
+    as(uid, `select public.admin_save_results($1, $2::jsonb) as n`, [gw, JSON.stringify(results)]);
+  const storePoints = (players: unknown, entries: unknown, publish: boolean, uid = ADMIN) =>
+    as(uid, `select public.admin_store_points($1, $2::jsonb, $3::jsonb, $4)`, [gameweekId, JSON.stringify(players), JSON.stringify(entries), publish]);
+
+  beforeAll(async () => {
+    const { rows } = await db.query<{ gameweek_id: number }>(
+      `select e.gameweek_id from public.gameweek_entries e join public.gameweeks g on g.id = e.gameweek_id
+       where e.user_id = $1 and g.status = 'locked' order by g.deadline desc limit 1`,
+      [PICKER],
+    );
+    gameweekId = rows[0].gameweek_id;
+    openId = (await db.query<{ id: number }>(`select id from private.upcoming_gameweek()`)).rows[0].id;
+    rules = (await db.query<{ id: string; type: string; points: number }>(`select id, type, points from public.scoring_rules order by sort_order`)).rows;
+    picked = (await db.query<{ player_id: string }>(
+      `select player_id from public.gameweek_picks where user_id = $1 and gameweek_id = $2 order by position`,
+      [PICKER, gameweekId],
+    )).rows.map((r) => r.player_id);
+  });
+
+  const tick = () => rules.find((r) => r.type === "tick")!;
+  const count = () => rules.find((r) => r.type === "count")!;
+
+  it("only lets admins save results, and only after the deadline", async () => {
+    await expect(saveResults([], MEMBER)).rejects.toThrow(/Admins only/);
+    await expect(saveResults([], ADMIN, openId)).rejects.toThrow(/hasn't reached its deadline/);
+    await expect(
+      as(MEMBER, `insert into public.rule_results (gameweek_id, player_id, rule_id, count) values ($1, $2, $3, 1)`, [gameweekId, picked[0], tick().id]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("saves raw results as rows, skipping zeros, and replaces them on re-save", async () => {
+    const results = [
+      { player_id: picked[0], did_not_play: false, counts: { [tick().id]: 1, [count().id]: 3 } },
+      { player_id: picked[1], did_not_play: true, counts: {} },
+      { player_id: picked[2], did_not_play: false, counts: { [tick().id]: 0 } }, // nothing: no rows
+    ];
+    expect(await saveResults(results)).toEqual([{ n: 2 }]);
+    const { rows } = await db.query(
+      `select player_id, count from public.rule_results where gameweek_id = $1 order by count`,
+      [gameweekId],
+    );
+    expect(rows).toEqual([
+      { player_id: picked[0], count: 1 },
+      { player_id: picked[0], count: 3 },
+    ]);
+    const { rows: apps } = await db.query(
+      `select player_id, did_not_play from public.player_gameweeks where gameweek_id = $1 order by did_not_play`,
+      [gameweekId],
+    );
+    expect(apps).toEqual([
+      { player_id: picked[0], did_not_play: false },
+      { player_id: picked[1], did_not_play: true },
+    ]);
+
+    await saveResults([{ player_id: picked[0], did_not_play: false, counts: { [tick().id]: 1 } }]);
+    const { rows: after } = await db.query(`select count(*)::int as n from public.rule_results where gameweek_id = $1`, [gameweekId]);
+    expect(after).toEqual([{ n: 1 }]);
+    const { rows: appsAfter } = await db.query(`select count(*)::int as n from public.player_gameweeks where gameweek_id = $1`, [gameweekId]);
+    expect(appsAfter).toEqual([{ n: 1 }]);
+  });
+
+  it("rejects impossible numbers", async () => {
+    await expect(saveResults([{ player_id: picked[0], counts: { [tick().id]: 2 } }])).rejects.toThrow(/ticks are 0 or 1/);
+    await expect(saveResults([{ player_id: picked[0], counts: { [count().id]: -1 } }])).rejects.toThrow(/counts 0–99/);
+    await expect(saveResults([{ player_id: picked[0], counts: { "00000000-0000-4000-8000-000000000000": 1 } }])).rejects.toThrow(
+      /scoring rules no longer exists/,
+    );
+  });
+
+  it("keeps drafts hidden from members until published", async () => {
+    expect(await as(PICKER, `select * from public.rule_results where gameweek_id = $1`, [gameweekId])).toEqual([]);
+    await expect(storePoints([], [], true, MEMBER)).rejects.toThrow(/Admins only/);
+  });
+
+  it("stores points, publishes, and then members can see the results", async () => {
+    await storePoints([{ player_id: picked[0], points: tick().points }], [{ user_id: PICKER, points: 42 }], true);
+    const { rows: gw } = await db.query(`select status, published_at is not null as stamped from public.gameweeks where id = $1`, [gameweekId]);
+    expect(gw).toEqual([{ status: "published", stamped: true }]);
+    expect(await as(PICKER, `select points from public.gameweek_entries where user_id = $1 and gameweek_id = $2`, [PICKER, gameweekId])).toEqual([
+      { points: 42 },
+    ]);
+    // Managers not in the list get 0 rather than staying blank.
+    const { rows } = await db.query(`select count(*)::int as n from public.gameweek_entries where gameweek_id = $1 and points is null`, [gameweekId]);
+    expect(rows).toEqual([{ n: 0 }]);
+    expect(await as(MEMBER, `select points from public.player_gameweeks where gameweek_id = $1`, [gameweekId])).toEqual([
+      { points: tick().points },
+    ]);
+    expect(await as(MEMBER, `select count(*)::int as n from public.rule_results where gameweek_id = $1`, [gameweekId])).toEqual([{ n: 1 }]);
+  });
+
+  it("can still edit and recalculate a published gameweek", async () => {
+    await saveResults([{ player_id: picked[0], counts: { [tick().id]: 1, [count().id]: 2 } }]);
+    await storePoints([{ player_id: picked[0], points: 7 }], [{ user_id: PICKER, points: 50 }], false);
+    const { rows } = await db.query(
+      `select g.status, e.points from public.gameweeks g join public.gameweek_entries e on e.gameweek_id = g.id where g.id = $1 and e.user_id = $2`,
+      [gameweekId, PICKER],
+    );
+    expect(rows).toEqual([{ status: "published", points: 50 }]);
   });
 });
 

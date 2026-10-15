@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { describeDbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireAdmin } from "@/lib/auth";
 import type { RuleCategory, RuleType } from "@/lib/database.types";
+import { recalculatePublished } from "@/lib/recalculate";
 import { validateRule } from "@/lib/rules";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,8 +27,16 @@ export async function saveRule(id: string | null, fields: RuleFields): Promise<A
 
   const supabase = await createClient();
   if (id) {
+    const { data: before } = await supabase.from("scoring_rules").select("points").eq("id", id).maybeSingle();
     const { error } = await supabase.from("scoring_rules").update(values).eq("id", id);
     if (error) return fail(describeDbError(error, "That rule"));
+    // New points value: every published gameweek is re-scored straight away.
+    if (before && before.points !== values.points) {
+      const recalcError = await recalculatePublished(supabase);
+      if (recalcError) return fail(`Rule saved, but points couldn't be recalculated: ${describeDbError(recalcError)}`);
+      refresh();
+      return ok(undefined, `“${values.name}” updated and published points recalculated`);
+    }
   } else {
     const { data: last } = await supabase
       .from("scoring_rules")

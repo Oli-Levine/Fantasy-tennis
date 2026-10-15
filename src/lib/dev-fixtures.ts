@@ -3,6 +3,7 @@
  * Never used in production builds.
  */
 import type { Database, Gameweek, Player, ScoringRule } from "@/lib/database.types";
+import { computeStandings } from "@/lib/league";
 
 const now = "2026-10-15T12:00:00Z";
 const base = { created_at: now, updated_at: now };
@@ -71,3 +72,22 @@ export const DEMO_SQUAD_PICKS = [
   { position: 4, player_id: "p12", is_captain: false, is_vice_captain: false },
   { position: 5, player_id: "p7", is_captain: false, is_vice_captain: false },
 ];
+
+const DEMO_MANAGERS = [
+  ["dev-user", "Deuce Bigalow", "Dev Player"], ["u3", "Net Gains", "Priya Shah"], ["u4", "Grand Slammers", "Alex Fern"],
+  ["u5", "Love Means Nothing", "Tom Hale"], ["u6", "Drop Shot Divas", "Mia Lowe"], ["u7", "Advantage Us", "Raj Iyer"],
+  ["u8", "Break Point", "Sophie King"], ["u9", "Smash Bros", "Leo Park"],
+].map(([userId, teamName, displayName]) => ({ userId, teamName, displayName }));
+
+/** Two published gameweeks of demo points (GW1, GW2). */
+export const DEMO_LEAGUE = {
+  standings: computeStandings(
+    DEMO_MANAGERS,
+    DEMO_MANAGERS.flatMap((m, i) => [
+      { userId: m.userId, gameweekId: 1, points: [42, 38, 51, 29, 38, 45, 33, 20][i] },
+      ...(i === 7 ? [] : [{ userId: m.userId, gameweekId: 2, points: [36, 47, 22, 41, 40, 31, 33, 0][i] }]),
+    ]),
+    [1, 2],
+  ),
+  latest: { id: 2, number: 2 },
+};

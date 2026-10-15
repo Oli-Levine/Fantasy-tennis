@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { describeDbError, fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireAdmin } from "@/lib/auth";
 import type { GameweekStatus } from "@/lib/database.types";
+import { recalculateGameweek } from "@/lib/recalculate";
 import { createClient } from "@/lib/supabase/server";
 
 function refresh() {
@@ -58,6 +59,11 @@ export async function updateGameweek(id: number, fields: GameweekFields): Promis
     .eq("id", id);
   if (error) {
     return fail(error.code === "23505" ? "Another gameweek already has that exact deadline." : describeDbError(error, "That gameweek"));
+  }
+  // Publishing from here scores the gameweek just like the Results page does.
+  if (fields.status === "published" && current.status !== "published" && !fields.is_blank) {
+    const recalcError = await recalculateGameweek(supabase, id, true);
+    if (recalcError) return fail(`Gameweek updated, but points couldn't be calculated: ${describeDbError(recalcError)}`);
   }
   refresh();
   return ok(undefined, "Gameweek updated");

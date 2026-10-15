@@ -13,6 +13,8 @@ export type PlayerCardData = {
   photoUrl?: string | null;
   badge?: CaptainBadge | null;
   unavailable?: boolean;
+  /** Short note, e.g. "Didn't play" or "Subbed on". */
+  tag?: string | null;
 };
 
 /** Wraps a card in a button when it's tappable. */
@@ -82,6 +84,12 @@ export function PlayerCard({
           {player.unavailable && (
             <span className="absolute bottom-2.5 left-2.5 rounded-lg bg-primary px-2 py-1 text-[10px] leading-none font-semibold tracking-wide text-white uppercase">
               Unavailable
+            </span>
+          )}
+
+          {player.tag && !player.unavailable && (
+            <span className="absolute bottom-2.5 left-2.5 rounded-lg bg-surface px-2 py-1 text-[10px] leading-none font-semibold tracking-wide text-muted-foreground uppercase shadow-soft">
+              {player.tag}
             </span>
           )}
 
@@ -179,8 +187,13 @@ export function BenchCard({
             {player.unavailable && <span className="font-semibold text-primary"> · Unavailable</span>}
           </div>
         </div>
-        <span className="shrink-0 rounded-lg bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase">
-          Bench
+        <span
+          className={cn(
+            "shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold uppercase",
+            player.tag ? "bg-success-soft text-success" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {player.tag ?? "Bench"}
         </span>
       </div>
     </Tappable>

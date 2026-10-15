@@ -10,11 +10,18 @@ import { chipInfo } from "@/lib/chips";
 import { formatPrice } from "@/lib/format";
 import { clubTeamLabel, playerPhotoUrl } from "@/lib/players";
 import { BENCH_INDEX, fromPicks, isFull, round1, squadCost } from "@/lib/squad";
+import { ordinal } from "@/lib/format";
+import { loadLeague } from "@/lib/league-data";
 import { loadTeamData } from "@/lib/team-data";
 
 export default async function HomePage() {
   const { user, profile } = await requireMember();
-  const { players, picks, budget, nextGameweek, stats, activeChip } = await loadTeamData(user.id);
+  const [{ players, picks, budget, nextGameweek, stats, activeChip }, league] = await Promise.all([
+    loadTeamData(user.id),
+    loadLeague(),
+  ]);
+  const me = league.standings.find((r) => r.userId === user.id);
+  const ranked = league.latest != null && me != null;
 
   const byId = new Map(players.map((p) => [p.id, p]));
   const squad = fromPicks(picks);
@@ -65,9 +72,11 @@ export default async function HomePage() {
           stats={[
             { label: "Budget left", value: formatPrice(left) },
             { label: "Deadline", value: <DeadlineCountdown deadline={nextGameweek?.deadline ?? null} /> },
-            // Points and rank arrive with results in a later update.
-            { label: "GW points", value: "–" },
-            { label: "Rank", value: "–" },
+            {
+              label: league.latest ? `GW${league.latest.number} pts` : "GW points",
+              value: ranked ? (me.gameweekPoints ?? "–") : "–",
+            },
+            { label: "Rank", value: ranked ? ordinal(me.rank) : "–" },
           ]}
         />
 

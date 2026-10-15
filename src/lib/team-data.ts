@@ -53,7 +53,7 @@ export async function loadTeamData(userId: string): Promise<TeamData> {
       .maybeSingle(),
     supabase.rpc("get_transfer_state"),
     supabase.from("chip_plays").select("chip, gameweeks(number)").eq("user_id", userId),
-    supabase.from("gameweeks").select("id").eq("status", "published").order("deadline", { ascending: false }).limit(1),
+    supabase.from("gameweeks").select("id").eq("status", "published").order("deadline", { ascending: false }),
     supabase.from("player_gameweeks").select("player_id, gameweek_id, points"),
   ]);
   const failed = [players, picks, settings, next, transferState, chips, published, results].find((r) => r.error);
@@ -61,8 +61,11 @@ export async function loadTeamData(userId: string): Promise<TeamData> {
   const transfers = transferState.data!;
 
   const lastPublishedId = published.data?.[0]?.id ?? null;
+  // Admins can also read draft results; only published gameweeks count.
+  const publishedIds = new Set((published.data ?? []).map((g) => g.id));
   const stats: Record<string, PlayerStats> = {};
   for (const row of results.data ?? []) {
+    if (!publishedIds.has(row.gameweek_id)) continue;
     const s = (stats[row.player_id] ??= { total: 0, last: lastPublishedId == null ? null : 0 });
     s.total += row.points ?? 0;
     if (row.gameweek_id === lastPublishedId) s.last = row.points ?? 0;
