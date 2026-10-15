@@ -159,6 +159,7 @@ export function TeamBuilder({
         />
 
         <TransfersBar
+          gameweekNumber={nextGameweek?.number ?? null}
           isNewManager={isNewManager}
           summary={transfers}
           freeTransfers={freeTransfers}
@@ -281,11 +282,13 @@ export function TeamBuilder({
 
 /** "1 free · 2 made → −5 pts", or why transfers are free right now. */
 function TransfersBar({
+  gameweekNumber,
   isNewManager,
   summary,
   freeTransfers,
   chipName,
 }: {
+  gameweekNumber: number | null;
   isNewManager: boolean;
   summary: TransferSummary;
   freeTransfers: number;
@@ -315,7 +318,7 @@ function TransfersBar({
             summary.hit > 0 ? "text-primary" : "text-muted-foreground",
           )}
         >
-          {summary.hit > 0 ? `→ −${summary.hit} pts` : "No hit"}
+          {summary.hit > 0 ? `−${summary.hit} pts${gameweekNumber ? ` off GW${gameweekNumber}` : ""}` : "No hit"}
         </span>
       )}
     </div>

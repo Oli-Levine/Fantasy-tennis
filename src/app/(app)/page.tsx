@@ -57,6 +57,8 @@ export default async function HomePage() {
   const bench = card(BENCH_INDEX);
   const benchPlayer = last?.score.picks.find((p) => p.autoSubbedIn);
   const armbandPlayer = last?.score.picks.find((p) => p.playerId === last.score.multiplierPlayerId);
+  const lastCaptain = last?.picks.find((p) => p.isCaptain);
+  const captainMissed = last != null && lastCaptain != null && last.score.multiplierPlayerId !== lastCaptain.playerId;
 
   return (
     <div className="space-y-4">
@@ -105,7 +107,10 @@ export default async function HomePage() {
                 GW{last.number}: {last.score.total} pts
               </strong>
               <span className="text-muted-foreground">
-                {armbandPlayer &&
+                {captainMissed &&
+                  ` · Captain didn't play${armbandPlayer ? `, so ${shortName(byId.get(armbandPlayer.playerId)?.name ?? "the vice-captain")} got ×${armbandPlayer.multiplier}` : ""}`}
+                {!captainMissed &&
+                  armbandPlayer &&
                   ` · ${shortName(byId.get(armbandPlayer.playerId)?.name ?? "Captain")} ×${armbandPlayer.multiplier}`}
                 {benchPlayer && ` · ${shortName(byId.get(benchPlayer.playerId)?.name ?? "Bench")} subbed on`}
                 {last.score.hit > 0 && ` · −${last.score.hit} hit`}

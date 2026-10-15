@@ -72,6 +72,16 @@ export default async function LeagueTeamPage({ params, searchParams }: PageProps
     };
   };
   const starters = view.picks.filter((p) => p.position !== BENCH_POSITION);
+  const captainPick = view.picks.find((p) => p.isCaptain);
+  const vicePick = view.picks.find((p) => p.isViceCaptain);
+  const nameOf = (pick?: EntryPick) => (pick ? (view.players.get(pick.playerId)?.name ?? "The player") : "");
+  const armbandNote = !score
+    ? null
+    : score.multiplierPlayerId == null
+      ? "Neither the captain nor the vice-captain played, so nobody's points were doubled."
+      : captainPick && score.multiplierPlayerId !== captainPick.playerId
+        ? `${nameOf(captainPick)} (captain) didn't play, so ${nameOf(vicePick)} (vice-captain) got the ${selected?.chip === "triple_captain" ? "3" : "2"}× instead.`
+        : null;
   const bench = view.picks.find((p) => p.position === BENCH_POSITION);
   const benchCard = bench ? card(bench) : null;
 
@@ -151,6 +161,10 @@ export default async function LeagueTeamPage({ params, searchParams }: PageProps
               <h2 className="mt-6 mb-3 text-sm font-semibold text-muted-foreground">Bench</h2>
               <BenchCard player={benchCard} />
             </>
+          )}
+
+          {score && armbandNote && (
+            <p className="mt-5 rounded-xl bg-gold-soft px-3 py-2.5 text-sm text-gold-ink">{armbandNote}</p>
           )}
 
           {score && (

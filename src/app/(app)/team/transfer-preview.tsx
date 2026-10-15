@@ -114,7 +114,7 @@ export function TransferPreview({
           {chipName
             ? `${chipName} is active, so these transfers are free.`
             : extra > 0
-              ? `This will cost −${extra} pts${savedHit > 0 ? ` more (−${summary.hit} pts in total this gameweek)` : ""}.`
+              ? `This will cost −${extra} pts${savedHit > 0 ? ` more (−${summary.hit} pts in total this gameweek)` : ""}, taken off your ${gameweekNumber ? `gameweek ${gameweekNumber}` : "next gameweek's"} score when it's published.`
               : summary.hit > 0
                 ? `Your hit this gameweek stays at −${summary.hit} pts.`
                 : summary.freeLeft
