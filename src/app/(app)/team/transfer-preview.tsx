@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 export function TransferPreview({
   open,
   summary,
-  savedHit,
+  saved,
   byId,
   budgetLeft,
   chipName,
@@ -32,8 +32,8 @@ export function TransferPreview({
 }: {
   open: boolean;
   summary: TransferSummary;
-  /** Hit already locked in by the last save, to show what changes. */
-  savedHit: number;
+  /** Transfers already saved this gameweek (before this edit). */
+  saved: TransferSummary;
   byId: Map<string, Player>;
   budgetLeft: number;
   chipName: string | null;
@@ -42,8 +42,19 @@ export function TransferPreview({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const pairs = summary.in.map((id, i) => [summary.out[i], id] as const);
+  const savedHit = saved.hit;
   const extra = summary.hit - savedHit;
+  // Swaps already saved this gameweek are listed too (they count towards the hit), but marked.
+  const earlierPairs = summary.in
+    .filter((id) => saved.in.includes(id))
+    .map((id) => ({ inId: id, outId: saved.out[saved.in.indexOf(id)], earlier: true }))
+    .filter((p) => p.outId != null && summary.out.includes(p.outId));
+  const usedOut = new Set(earlierPairs.map((p) => p.outId));
+  const newIn = summary.in.filter((id) => !earlierPairs.some((p) => p.inId === id));
+  const newOut = summary.out.filter((id) => !usedOut.has(id));
+  const pairs = [...earlierPairs, ...newIn.map((id, i) => ({ inId: id, outId: newOut[i], earlier: false }))];
+  const newCount = pairs.filter((p) => !p.earlier).length;
+  const earlierCount = pairs.length - newCount;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !saving && onCancel()}>
@@ -53,17 +64,24 @@ export function TransferPreview({
           <DialogDescription>
             {summary.made === 0
               ? "Your squad is back to how it was at the last deadline, so there are no transfers."
-              : `${summary.made} transfer${summary.made === 1 ? "" : "s"} for ${gameweekNumber ? `gameweek ${gameweekNumber}` : "the next gameweek"}, counted from your team at the last deadline.`}
+              : earlierCount > 0
+                ? `${newCount} new transfer${newCount === 1 ? "" : "s"}, plus ${earlierCount} you already saved for ${gameweekNumber ? `gameweek ${gameweekNumber}` : "the next gameweek"}. They all count towards this gameweek's free transfer.`
+                : `${summary.made} transfer${summary.made === 1 ? "" : "s"} for ${gameweekNumber ? `gameweek ${gameweekNumber}` : "the next gameweek"}.`}
           </DialogDescription>
         </DialogHeader>
 
         {pairs.length > 0 && (
           <ul className="space-y-2">
-            {pairs.map(([outId, inId]) => (
-              <li key={inId} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl bg-muted/60 p-2.5">
-                <PlayerChip player={outId ? byId.get(outId) : undefined} tone="out" />
-                <ArrowRight className="size-4 text-muted-foreground" aria-label="replaced by" />
-                <PlayerChip player={byId.get(inId)} tone="in" />
+            {pairs.map(({ outId, inId, earlier }) => (
+              <li key={inId} className={cn("rounded-xl p-2.5", earlier ? "border border-dashed border-border" : "bg-muted/60")}>
+                {earlier && (
+                  <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Saved earlier</p>
+                )}
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <PlayerChip player={outId ? byId.get(outId) : undefined} tone="out" />
+                  <ArrowRight className="size-4 text-muted-foreground" aria-label="replaced by" />
+                  <PlayerChip player={byId.get(inId)} tone="in" />
+                </div>
               </li>
             ))}
           </ul>

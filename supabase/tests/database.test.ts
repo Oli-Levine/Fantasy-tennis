@@ -775,6 +775,7 @@ describe("publishing end to end (same queries as src/lib/recalculate.ts)", () =>
     // A brand-new manager (so no transfer hits) with captain pos 1, vice pos 2.
     await signUp(SCORER, "scorer@example.com", "Sam Scorer");
     await as(SCORER, `select public.join_club($1)`, [await joinCode()]);
+    await as(SCORER, `update public.profiles set team_name = 'Score Draw' where id = $1`, [SCORER]);
     const [gw] = await as<{ id: number }>(
       ADMIN,
       `insert into public.gameweeks (number, deadline) values (950, now() + interval '20 minutes') returning id`,
@@ -814,6 +815,13 @@ describe("publishing end to end (same queries as src/lib/recalculate.ts)", () =>
     expect(await publish([won(0, true), won(1), won(2), won(3), won(4)])).toBe(points * (2 + 1 + 1 + 1));
     // A non-captain starter didn't play: captain doubled and bench comes on.
     expect(await publish([won(0), won(1), won(2, true), won(3), won(4)])).toBe(points * (2 + 1 + 1 + 1));
+
+    // The owner's read-only check script agrees with the stored points.
+    const check = (await db.query<{ team: string; stored_points: number; expected_points: number }>(
+      sqlFile("admin/check_points.sql"),
+    )).rows.filter((r) => r.team === "Score Draw");
+    expect(check).toHaveLength(1);
+    expect(check[0].expected_points).toBe(check[0].stored_points);
   });
 });
 

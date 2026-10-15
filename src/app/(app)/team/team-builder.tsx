@@ -265,7 +265,7 @@ export function TeamBuilder({
       <TransferPreview
         open={previewing}
         summary={transfers}
-        savedHit={savedTransfers.hit}
+        saved={savedTransfers}
         byId={byId}
         budgetLeft={left}
         chipName={rules.unlimited && activeChip ? chipInfo(activeChip).name : null}
