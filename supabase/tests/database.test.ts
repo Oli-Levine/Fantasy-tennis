@@ -15,6 +15,7 @@ const SCHEMA = sqlFile("migrations/0001_schema.sql");
 const SECURITY = sqlFile("migrations/0002_security.sql");
 const ADMIN_TOOLS = sqlFile("migrations/0003_admin.sql");
 const SQUADS = sqlFile("migrations/0004_squads.sql");
+const TRANSFERS = sqlFile("migrations/0005_transfers_chips.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -60,6 +61,7 @@ beforeAll(async () => {
     await db.exec(SECURITY);
     await db.exec(ADMIN_TOOLS);
     await db.exec(SQUADS);
+    await db.exec(TRANSFERS);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
@@ -395,7 +397,7 @@ describe("squads and the deadline lock", () => {
   });
 
   it("saves a valid squad of 4 starters and a bench player", async () => {
-    expect(await save(squad(cheap.slice(0, 5)))).toEqual([{ r: { changed_players: true } }]);
+    expect(await save(squad(cheap.slice(0, 5)))).toEqual([{ r: { changed_players: true, transfers_made: 0, transfer_hit: 0 } }]);
     const picks = await myPicks();
     expect(picks.map((p) => p.player_id)).toEqual(cheap.slice(0, 5));
     expect(picks.find((p) => p.is_captain)?.position).toBe(1);
@@ -471,10 +473,6 @@ describe("squads and the deadline lock", () => {
     expect(await as(PICKER, `select * from public.gameweek_picks where user_id = $1 and gameweek_id = $2 order by position`, [PICKER, gameweekId])).toEqual(before);
   });
 
-  it("treats player changes after the first lock as transfers (coming in Phase 5)", async () => {
-    await expect(save(squad([...cheap.slice(0, 4), cheap[6]]))).rejects.toThrow(/count as transfers/);
-  });
-
   it("locks the old squad first when someone saves just after a deadline", async () => {
     const [gw2] = await as<{ id: number }>(
       ADMIN,
@@ -496,6 +494,166 @@ describe("squads and the deadline lock", () => {
     await as(PICKER, `select public.sync_gameweeks()`);
     const { rows } = await db.query(`select count(*)::int as n from public.gameweek_picks where user_id = $1 and gameweek_id = $2`, [PICKER, gameweekId]);
     expect(rows).toEqual([{ n: 5 }]);
+  });
+});
+
+describe("transfers and chips", () => {
+  type State = {
+    gameweek_id: number | null;
+    baseline_player_ids: string[] | null;
+    chip: string | null;
+    transfers_made: number;
+    transfer_hit: number;
+    free_transfers: number;
+    hit_points: number;
+  };
+  let cheap: string[];
+
+  const squad = (ids: string[], captain = 1, vice = 2) =>
+    ids.map((player_id, i) => ({ position: i + 1, player_id, is_captain: i + 1 === captain, is_vice_captain: i + 1 === vice }));
+  const save = async (ids: string[], uid = PICKER) =>
+    (await as<{ r: { changed_players: boolean; transfers_made: number; transfer_hit: number } }>(
+      uid,
+      `select public.save_squad($1::jsonb) as r`,
+      [JSON.stringify(squad(ids))],
+    ))[0].r;
+  const state = async (uid = PICKER) => (await as<{ s: State }>(uid, `select public.get_transfer_state() as s`))[0].s;
+  const playChip = (chip: string, uid = PICKER) => as(uid, `select public.play_chip($1)`, [chip]);
+  const cancelChip = (chip: string, uid = PICKER) => as(uid, `select public.cancel_chip($1)`, [chip]);
+  const squadIds = async (uid = PICKER) =>
+    (await db.query<{ player_id: string }>(`select player_id from public.squad_picks where user_id = $1 order by position`, [uid])).rows.map(
+      (r) => r.player_id,
+    );
+  const entry = async (gameweekId: number, uid = PICKER) =>
+    (
+      await db.query<{ chip: string | null; transfers_made: number; transfer_hit: number }>(
+        `select chip, transfers_made, transfer_hit from public.gameweek_entries where user_id = $1 and gameweek_id = $2`,
+        [uid, gameweekId],
+      )
+    ).rows[0];
+  /** A new gameweek that's the next one to lock. */
+  const newGameweek = async () =>
+    (
+      await as<{ id: number }>(
+        ADMIN,
+        `insert into public.gameweeks (number, deadline) values (900, now() + interval '30 minutes') returning id`,
+      )
+    )[0].id;
+  const passDeadline = async (gameweekId: number) => {
+    await as(ADMIN, `update public.gameweeks set deadline = now() - interval '1 second' where id = $1`, [gameweekId]);
+    await as(MEMBER, `select public.sync_gameweeks()`);
+  };
+
+  beforeAll(async () => {
+    cheap = (await db.query<{ id: string }>(`select id from public.players where is_test_data order by price, name limit 10`)).rows.map((r) => r.id);
+    // From the Phase 4 tests: PICKER's latest locked team is cheap[0..4].
+    await save(cheap.slice(0, 5));
+  });
+
+  it("counts transfers against the last locked team, so undoing one is free", async () => {
+    const s = await state();
+    expect(s).toMatchObject({ transfers_made: 0, transfer_hit: 0, free_transfers: 1, hit_points: 5, chip: null });
+    expect([...s.baseline_player_ids!].sort()).toEqual([...cheap.slice(0, 5)].sort());
+
+    expect(await save([...cheap.slice(0, 4), cheap[5]])).toMatchObject({ transfers_made: 1, transfer_hit: 0 });
+    expect(await save([...cheap.slice(0, 3), cheap[5], cheap[6]])).toMatchObject({ transfers_made: 2, transfer_hit: 5 });
+    expect(await save([...cheap.slice(0, 3), cheap[5], cheap[7]])).toMatchObject({ transfers_made: 2, transfer_hit: 5 });
+    expect(await save([...cheap.slice(0, 4), cheap[7]])).toMatchObject({ transfers_made: 1, transfer_hit: 0 });
+    expect(await save(cheap.slice(0, 5))).toMatchObject({ transfers_made: 0, transfer_hit: 0 }); // all undone
+  });
+
+  it("gives new managers unlimited free changes until their first deadline", async () => {
+    expect(await state(MEMBER)).toMatchObject({ baseline_player_ids: null, transfers_made: 0, transfer_hit: 0 });
+    await expect(playChip("wildcard", MEMBER)).rejects.toThrow(/already free/);
+    await expect(playChip("free_hit", MEMBER)).rejects.toThrow(/already free/);
+  });
+
+  it("records transfers and the points hit when the deadline passes", async () => {
+    const gw = await newGameweek();
+    await save([...cheap.slice(0, 3), cheap[5], cheap[6]]); // 2 transfers: 1 free, 1 costs 5
+    await passDeadline(gw);
+
+    expect(await entry(gw)).toEqual({ chip: null, transfers_made: 2, transfer_hit: 5 });
+    const { rows } = await db.query<{ player_out_id: string; player_in_id: string; is_free: boolean }>(
+      `select player_out_id, player_in_id, is_free from public.transfers where user_id = $1 and gameweek_id = $2 order by id`,
+      [PICKER, gw],
+    );
+    expect(rows.map((r) => r.is_free)).toEqual([true, false]);
+    expect(rows.map((r) => r.player_out_id).sort()).toEqual([cheap[3], cheap[4]].sort());
+    expect(rows.map((r) => r.player_in_id).sort()).toEqual([cheap[5], cheap[6]].sort());
+
+    // The new locked team is now the baseline.
+    expect(await state()).toMatchObject({ transfers_made: 0, transfer_hit: 0 });
+    // Locking again changes nothing.
+    await db.query(`update public.gameweeks set status = 'open' where id = $1`, [gw]);
+    await as(PICKER, `select public.sync_gameweeks()`);
+    const { rows: again } = await db.query(`select count(*)::int as n from public.transfers where user_id = $1 and gameweek_id = $2`, [PICKER, gw]);
+    expect(again).toEqual([{ n: 2 }]);
+  });
+
+  it("allows one chip per gameweek, which can be cancelled before the deadline", async () => {
+    await newGameweek();
+    await playChip("triple_captain");
+    expect((await state()).chip).toBe("triple_captain");
+    await expect(playChip("wildcard")).rejects.toThrow(/one chip per gameweek/);
+    await cancelChip("triple_captain");
+    expect((await state()).chip).toBeNull();
+    await expect(cancelChip("triple_captain")).rejects.toThrow(/isn't active/);
+    await expect(playChip("bench_boost")).rejects.toThrow(/Unknown chip/);
+    await expect(as(PICKER, `insert into public.chip_plays (user_id, chip, gameweek_id) values ($1, 'wildcard', 1)`, [PICKER])).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+
+  it("Wildcard: unlimited free transfers that stay, once a season", async () => {
+    const gw = (await state()).gameweek_id!;
+    await playChip("wildcard");
+    await playChip("wildcard"); // pressing it twice is fine
+    expect(await save([cheap[0], cheap[5], cheap[7], cheap[8], cheap[9]])).toMatchObject({ transfers_made: 3, transfer_hit: 0 });
+    await passDeadline(gw);
+
+    expect(await entry(gw)).toEqual({ chip: "wildcard", transfers_made: 3, transfer_hit: 0 });
+    const { rows } = await db.query(`select bool_and(is_free) as all_free from public.transfers where user_id = $1 and gameweek_id = $2`, [PICKER, gw]);
+    expect(rows).toEqual([{ all_free: true }]);
+    expect(await squadIds()).toEqual([cheap[0], cheap[5], cheap[7], cheap[8], cheap[9]]); // changes stay
+
+    await newGameweek();
+    await expect(playChip("wildcard")).rejects.toThrow(/already used that chip in gameweek/);
+    await expect(cancelChip("wildcard")).rejects.toThrow(/deadline has passed/);
+  });
+
+  it("Free Hit: free transfers for one week, then the squad goes back", async () => {
+    const gw = (await state()).gameweek_id!;
+    const before = await squadIds();
+    await playChip("free_hit");
+    expect(await save([cheap[1], cheap[2], cheap[3], cheap[4], cheap[9]])).toMatchObject({ transfers_made: 4, transfer_hit: 0 });
+    await passDeadline(gw);
+
+    expect(await entry(gw)).toEqual({ chip: "free_hit", transfers_made: 4, transfer_hit: 0 });
+    const { rows } = await db.query<{ player_id: string }>(
+      `select player_id from public.gameweek_picks where user_id = $1 and gameweek_id = $2 order by position`,
+      [PICKER, gw],
+    );
+    expect(rows.map((r) => r.player_id)).toEqual([cheap[1], cheap[2], cheap[3], cheap[4], cheap[9]]); // played the Free Hit team
+    expect(await squadIds()).toEqual(before); // and got the old team back
+    const { rows: armbands } = await db.query(
+      `select count(*) filter (where is_captain)::int as c, count(*) filter (where is_vice_captain)::int as vc from public.squad_picks where user_id = $1`,
+      [PICKER],
+    );
+    expect(armbands).toEqual([{ c: 1, vc: 1 }]);
+
+    // The next week counts transfers against the team before the Free Hit.
+    await newGameweek();
+    expect(await state()).toMatchObject({ transfers_made: 0, transfer_hit: 0 });
+    expect(await save([cheap[0], cheap[5], cheap[6], cheap[7], cheap[9]])).toMatchObject({ transfers_made: 1, transfer_hit: 0 });
+  });
+
+  it("gives a chip back if the manager's team wasn't complete at the deadline", async () => {
+    const gw = (await state(MEMBER)).gameweek_id!;
+    await playChip("triple_captain", MEMBER); // MEMBER has no squad
+    await passDeadline(gw);
+    const { rows } = await db.query(`select count(*)::int as n from public.chip_plays where user_id = $1`, [MEMBER]);
+    expect(rows).toEqual([{ n: 0 }]);
   });
 });
 

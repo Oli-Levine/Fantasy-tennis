@@ -14,6 +14,7 @@ import {
   squadProblems,
   swapSlots,
   toPicks,
+  transferSummary,
   type PoolPlayer,
   type Squad,
 } from "./squad";
@@ -104,12 +105,11 @@ describe("saving", () => {
 describe("addBlocker", () => {
   const s = build("a", "b");
   it("explains why a player is greyed out", () => {
-    expect(addBlocker(pool[0], s, 13.5, true)).toBe("In your squad");
-    expect(addBlocker(pool[5], s, 13.5, true)).toBe("Unavailable");
-    expect(addBlocker(pool[6], s, 10, true)).toBe("£1.0m over budget");
-    expect(addBlocker(pool[2], s, 13.5, false)).toBe("Transfers coming soon");
-    expect(addBlocker(pool[6], build("a", "b", "c", "d", "e"), 50, true)).toBe("Squad full");
-    expect(addBlocker(pool[2], s, 7, true)).toBeNull(); // exactly affordable
+    expect(addBlocker(pool[0], s, 13.5)).toBe("In your squad");
+    expect(addBlocker(pool[5], s, 13.5)).toBe("Unavailable");
+    expect(addBlocker(pool[6], s, 10)).toBe("£1.0m over budget");
+    expect(addBlocker(pool[6], build("a", "b", "c", "d", "e"), 50)).toBe("Squad full");
+    expect(addBlocker(pool[2], s, 7)).toBeNull(); // exactly affordable
   });
 });
 
@@ -129,5 +129,45 @@ describe("autoPick", () => {
     const s = autoPick(emptySquad(), pool, 10);
     expect(squadCost(s, price)).toBeLessThanOrEqual(10);
     expect(playerIds(s).length).toBeLessThan(5);
+  });
+});
+
+describe("transfers", () => {
+  const rules = { baselineIds: ["a", "b", "c", "d", "e"], freeTransfers: 1, hitPoints: 5, unlimited: false };
+
+  it("is free for new managers with no locked team", () => {
+    expect(transferSummary(build("g", "b", "c", "d", "e"), { ...rules, baselineIds: null })).toEqual({
+      out: [], in: [], made: 0, hit: 0, freeLeft: null,
+    });
+  });
+
+  it("counts players who weren't in the last locked team", () => {
+    expect(transferSummary(build("a", "b", "c", "d", "e"), rules)).toMatchObject({ made: 0, hit: 0, freeLeft: 1 });
+    expect(transferSummary(build("a", "b", "c", "d", "g"), rules)).toEqual({
+      out: ["e"], in: ["g"], made: 1, hit: 0, freeLeft: 0,
+    });
+  });
+
+  it("charges the hit for each transfer beyond the free ones", () => {
+    const s = removePlayer(removePlayer(build("a", "b", "c", "d", "e"), "d"), "e");
+    expect(transferSummary(addPlayer(addPlayer(s, "g"), "f"), rules)).toMatchObject({ made: 2, hit: 5 });
+    expect(transferSummary(build("g", "f", "c", "d", "e"), { ...rules, hitPoints: 4, freeTransfers: 0 })).toMatchObject({ made: 2, hit: 8 });
+  });
+
+  it("makes undoing a transfer free", () => {
+    const swapped = addPlayer(removePlayer(build("a", "b", "c", "d", "e"), "e"), "g");
+    const undone = addPlayer(removePlayer(swapped, "g"), "e");
+    expect(transferSummary(undone, rules)).toMatchObject({ made: 0, hit: 0 });
+  });
+
+  it("ignores line-up changes and counts a half-finished swap as nothing yet", () => {
+    expect(transferSummary(swapSlots(build("a", "b", "c", "d", "e"), 0, 4), rules)).toMatchObject({ made: 0 });
+    expect(transferSummary(removePlayer(build("a", "b", "c", "d", "e"), "e"), rules)).toMatchObject({ out: ["e"], in: [], made: 0 });
+  });
+
+  it("makes every transfer free with a Wildcard or Free Hit", () => {
+    expect(transferSummary(build("g", "f", "c", "d", "e"), { ...rules, unlimited: true })).toMatchObject({
+      made: 2, hit: 0, freeLeft: null,
+    });
   });
 });

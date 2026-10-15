@@ -2,12 +2,13 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, RotateCcw, Shuffle } from "lucide-react";
+import { ArrowLeftRight, RotateCcw, Shuffle } from "lucide-react";
 import { toast } from "sonner";
 import { DeadlineCountdown } from "@/components/app/deadline-countdown";
 import { BenchCard, EmptySlotCard, PlayerCard, type PlayerCardData } from "@/components/app/player-card";
 import { StatsHeader } from "@/components/app/stats-header";
 import { Button } from "@/components/ui/button";
+import { chipInfo, isUnlimitedTransferChip } from "@/lib/chips";
 import type { Player } from "@/lib/database.types";
 import { formatPrice } from "@/lib/format";
 import { clubTeamLabel, playerPhotoUrl } from "@/lib/players";
@@ -26,13 +27,19 @@ import {
   squadProblems,
   swapSlots,
   toPicks,
+  transferSummary,
   type Squad,
+  type TransferRules,
+  type TransferSummary,
 } from "@/lib/squad";
 import type { TeamData } from "@/lib/team-data";
 import { formatLondonDateTime } from "@/lib/time";
+import { cn } from "@/lib/utils";
 import { saveSquadAction } from "./actions";
+import { ChipsCard } from "./chips-card";
 import { PlayerPool } from "./player-pool";
 import { PlayerSheet } from "./player-sheet";
+import { TransferPreview } from "./transfer-preview";
 
 export function TeamBuilder({
   teamName,
@@ -40,7 +47,11 @@ export function TeamBuilder({
   picks,
   budget,
   nextGameweek,
-  canChangePlayers,
+  baselineIds,
+  freeTransfers,
+  hitPoints,
+  activeChip,
+  chipsUsed,
   stats,
 }: TeamData & { teamName: string }) {
   const router = useRouter();
@@ -48,6 +59,7 @@ export function TeamBuilder({
   const [squad, setSquad] = useState<Squad>(saved);
   const [selected, setSelected] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
+  const [previewing, setPreviewing] = useState(false);
   const poolRef = useRef<HTMLElement>(null);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
@@ -58,6 +70,17 @@ export function TeamBuilder({
   const dirty = JSON.stringify(toPicks(squad)) !== JSON.stringify(toPicks(saved));
   const count = playerIds(squad).length;
 
+  const isNewManager = baselineIds == null;
+  const rules: TransferRules = {
+    baselineIds,
+    freeTransfers,
+    hitPoints,
+    unlimited: isUnlimitedTransferChip(activeChip),
+  };
+  const transfers = transferSummary(squad, rules);
+  const savedTransfers = transferSummary(saved, rules);
+  const playersChanged = playerIds(squad).sort().join() !== playerIds(saved).sort().join();
+
   const cardData = (player: Player, index: number): PlayerCardData => {
     const slot = squad[index]!;
     return {
@@ -66,7 +89,7 @@ export function TeamBuilder({
       price: player.price,
       photoUrl: playerPhotoUrl(player.photo_path),
       lastPoints: stats[player.id]?.last ?? null,
-      badge: slot.isCaptain ? "C" : slot.isViceCaptain ? "VC" : null,
+      badge: slot.isCaptain ? (activeChip === "triple_captain" ? "TC" : "C") : slot.isViceCaptain ? "VC" : null,
       unavailable: !player.is_active,
     };
   };
@@ -76,13 +99,23 @@ export function TeamBuilder({
   }
 
   function save() {
+    // Changing players after your first deadline: show the transfer preview first.
+    if (!isNewManager && playersChanged && !previewing) {
+      setPreviewing(true);
+      return;
+    }
     startSaving(async () => {
       const result = await saveSquadAction(toPicks(squad));
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success(nextGameweek ? `Team saved for gameweek ${nextGameweek.number}` : "Team saved");
+      setPreviewing(false);
+      const hit = result.data.transferHit;
+      toast.success(
+        (nextGameweek ? `Team saved for gameweek ${nextGameweek.number}` : "Team saved") +
+          (hit > 0 ? ` (−${hit} pts for transfers)` : ""),
+      );
       router.refresh();
     });
   }
@@ -100,29 +133,36 @@ export function TeamBuilder({
             </span>
           }
           actions={
-            canChangePlayers && (
-              <>
-                <Button
-                  variant="soft"
-                  size="sm"
-                  disabled={count === 5}
-                  onClick={() => setSquad((s) => autoPick(s, players, budget))}
-                >
-                  <Shuffle />
-                  Auto-pick
-                </Button>
+            <>
+              <Button
+                variant="soft"
+                size="sm"
+                disabled={count === 5}
+                onClick={() => setSquad((s) => autoPick(s, players, budget))}
+              >
+                <Shuffle />
+                Auto-pick
+              </Button>
+              {isNewManager && (
                 <Button variant="secondary" size="sm" disabled={count === 0} onClick={() => setSquad(emptySquad())}>
                   <RotateCcw />
                   Clear
                 </Button>
-              </>
-            )
+              )}
+            </>
           }
           stats={[
             { label: "Players", value: `${count} / 5` },
             { label: "Budget left", value: <span className={left < 0 ? "text-primary" : ""}>{formatPrice(left)}</span> },
             { label: "Until deadline", value: <DeadlineCountdown deadline={nextGameweek?.deadline ?? null} /> },
           ]}
+        />
+
+        <TransfersBar
+          isNewManager={isNewManager}
+          summary={transfers}
+          freeTransfers={freeTransfers}
+          chipName={rules.unlimited && activeChip ? chipInfo(activeChip).name : null}
         />
 
         <h2 className="mt-4 mb-3 text-sm font-semibold text-muted-foreground">Starters</h2>
@@ -132,7 +172,7 @@ export function TeamBuilder({
             return player ? (
               <PlayerCard key={player.id} player={cardData(player, i)} onClick={() => setSelected(player.id)} />
             ) : (
-              <EmptySlotCard key={`empty-${i}`} label="Add starter" onClick={canChangePlayers ? scrollToPool : undefined} />
+              <EmptySlotCard key={`empty-${i}`} label="Add starter" onClick={scrollToPool} />
             );
           })}
         </div>
@@ -144,7 +184,7 @@ export function TeamBuilder({
           return player ? (
             <BenchCard player={cardData(player, BENCH_INDEX)} onClick={() => setSelected(player.id)} />
           ) : (
-            <EmptySlotCard bench label="Add bench player" onClick={canChangePlayers ? scrollToPool : undefined} />
+            <EmptySlotCard bench label="Add bench player" onClick={scrollToPool} />
           );
         })()}
         <p className="mt-2 px-1 text-xs text-muted-foreground">
@@ -152,14 +192,25 @@ export function TeamBuilder({
         </p>
       </section>
 
-      <DeadlineNote nextGameweek={nextGameweek} canChangePlayers={canChangePlayers} />
+      <ChipsCard
+        activeChip={activeChip}
+        chipsUsed={chipsUsed}
+        gameweekNumber={nextGameweek?.number ?? null}
+        isNewManager={isNewManager}
+      />
+
+      <DeadlineNote
+        nextGameweek={nextGameweek}
+        isNewManager={isNewManager}
+        freeTransfers={freeTransfers}
+        hitPoints={hitPoints}
+      />
 
       <PlayerPool
         ref={poolRef}
         players={players}
         squad={squad}
         budgetLeft={left}
-        canChangePlayers={canChangePlayers}
         stats={stats}
         onAdd={(id) => setSquad((s) => addPlayer(s, id))}
         onRemove={(id) => setSquad((s) => removePlayer(s, id))}
@@ -172,7 +223,7 @@ export function TeamBuilder({
           squad={squad}
           byId={byId}
           stats={stats[selected]}
-          canChangePlayers={canChangePlayers}
+          isNewManager={isNewManager}
           onClose={() => setSelected(null)}
           onCaptain={() => setSquad((s) => setCaptain(s, selected))}
           onViceCaptain={() => setSquad((s) => setViceCaptain(s, selected))}
@@ -189,7 +240,11 @@ export function TeamBuilder({
         >
           <div className="mx-auto flex max-w-content items-center gap-3 rounded-2xl bg-ink p-3 pl-4 text-white shadow-lifted">
             <p className="min-w-0 flex-1 text-sm leading-snug">
-              {problems.length ? problems[0] : "You have unsaved changes."}
+              {problems.length
+                ? problems[0]
+                : !isNewManager && playersChanged
+                  ? `${transfers.made} transfer${transfers.made === 1 ? "" : "s"} · ${transfers.hit > 0 ? `−${transfers.hit} pts` : "free"}`
+                  : "You have unsaved changes."}
             </p>
             <Button
               variant="ghost"
@@ -201,35 +256,86 @@ export function TeamBuilder({
               Undo
             </Button>
             <Button size="sm" onClick={save} disabled={saving || problems.length > 0}>
-              {saving ? "Saving…" : "Save team"}
+              {saving ? "Saving…" : !isNewManager && playersChanged ? "Review" : "Save team"}
             </Button>
           </div>
         </div>
       )}
+
+      <TransferPreview
+        open={previewing}
+        summary={transfers}
+        savedHit={savedTransfers.hit}
+        byId={byId}
+        budgetLeft={left}
+        chipName={rules.unlimited && activeChip ? chipInfo(activeChip).name : null}
+        gameweekNumber={nextGameweek?.number ?? null}
+        saving={saving}
+        onCancel={() => setPreviewing(false)}
+        onConfirm={save}
+      />
       {dirty && <div className="h-16" aria-hidden="true" />}
+    </div>
+  );
+}
+
+/** "1 free · 2 made → −5 pts", or why transfers are free right now. */
+function TransfersBar({
+  isNewManager,
+  summary,
+  freeTransfers,
+  chipName,
+}: {
+  isNewManager: boolean;
+  summary: TransferSummary;
+  freeTransfers: number;
+  chipName: string | null;
+}) {
+  const text = isNewManager
+    ? "Unlimited free changes until your first deadline"
+    : chipName
+      ? `${chipName}: unlimited free transfers · ${summary.made} made`
+      : `${freeTransfers} free · ${summary.made} made`;
+  return (
+    <div
+      className={cn(
+        "mt-3 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm",
+        chipName ? "bg-gold-soft text-gold-ink" : "bg-muted/70",
+      )}
+    >
+      <ArrowLeftRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="sr-only">Transfers: </span>
+        {text}
+      </span>
+      {!isNewManager && !chipName && (
+        <span
+          className={cn(
+            "shrink-0 font-heading font-semibold tabular-nums",
+            summary.hit > 0 ? "text-primary" : "text-muted-foreground",
+          )}
+        >
+          {summary.hit > 0 ? `→ −${summary.hit} pts` : "No hit"}
+        </span>
+      )}
     </div>
   );
 }
 
 function DeadlineNote({
   nextGameweek,
-  canChangePlayers,
+  isNewManager,
+  freeTransfers,
+  hitPoints,
 }: {
   nextGameweek: TeamData["nextGameweek"];
-  canChangePlayers: boolean;
+  isNewManager: boolean;
+  freeTransfers: number;
+  hitPoints: number;
 }) {
   return (
-    <div className="space-y-2">
-      {!canChangePlayers && (
-        <p className="flex gap-2.5 rounded-xl bg-gold-soft px-4 py-3 text-sm text-gold-ink">
-          <Lock className="mt-0.5 size-4 shrink-0" />
-          <span>
-            Your team has been locked in for a gameweek, so swapping players now counts as a transfer. Transfers are
-            coming in the next update. You can still change your captain, vice-captain and bench.
-          </span>
-        </p>
-      )}
-      <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+    <div className="space-y-2 px-1 text-xs leading-relaxed text-muted-foreground">
+      <p>
         {nextGameweek ? (
           <>
             Deadline for gameweek {nextGameweek.number}:{" "}
@@ -237,8 +343,13 @@ function DeadlineNote({
             team is locked in then; changes after that count for the following gameweek.
           </>
         ) : (
-          "No upcoming deadline has been set yet, so you can change your team freely."
+          "No upcoming deadline has been set yet."
         )}
+      </p>
+      <p>
+        {isNewManager
+          ? "After your first deadline, swapping players counts as a transfer."
+          : `Swapping players counts as a transfer: ${freeTransfers} free per gameweek, then −${hitPoints} pts each. Free transfers don't roll over. Swap a player back before the deadline and it no longer counts.`}
       </p>
     </div>
   );

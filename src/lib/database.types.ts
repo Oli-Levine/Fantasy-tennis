@@ -103,6 +103,19 @@ export type Transfer = {
   created_at: Timestamp;
 };
 
+/** public.get_transfer_state(): transfers for the coming gameweek. */
+export type TransferState = {
+  gameweek_id: number | null;
+  /** Players in the last locked team; null = no locked team yet (changes are free). */
+  baseline_player_ids: Uuid[] | null;
+  /** Chip played for the coming gameweek. */
+  chip: Chip | null;
+  transfers_made: number;
+  transfer_hit: number;
+  free_transfers: number;
+  hit_points: number;
+};
+
 export type GameweekEntry = {
   user_id: Uuid;
   gameweek_id: number;
@@ -147,7 +160,19 @@ export type Database = {
       scoring_rules: Table<ScoringRule, "name" | "points" | "type" | "category">;
       gameweeks: Table<Gameweek, "number" | "deadline">;
       squad_picks: Table<SquadPick, "user_id" | "position" | "player_id">;
-      chip_plays: Table<ChipPlay, "user_id" | "chip" | "gameweek_id">;
+      chip_plays: Table<
+        ChipPlay,
+        "user_id" | "chip" | "gameweek_id",
+        [
+          {
+            foreignKeyName: "chip_plays_gameweek_id_fkey";
+            columns: ["gameweek_id"];
+            isOneToOne: false;
+            referencedRelation: "gameweeks";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
       transfers: Table<Transfer, "user_id" | "gameweek_id" | "player_out_id" | "player_in_id" | "is_free">;
       gameweek_entries: Table<GameweekEntry, "user_id" | "gameweek_id">;
       gameweek_picks: Table<GameweekPick, "user_id" | "gameweek_id" | "position" | "player_id">;
@@ -168,8 +193,11 @@ export type Database = {
         Args: {
           p_picks: { position: number; player_id: Uuid; is_captain: boolean; is_vice_captain: boolean }[];
         };
-        Returns: { changed_players: boolean };
+        Returns: { changed_players: boolean; transfers_made: number; transfer_hit: number };
       };
+      get_transfer_state: { Args: never; Returns: TransferState };
+      play_chip: { Args: { p_chip: Chip }; Returns: { chip: Chip; gameweek_id: number } };
+      cancel_chip: { Args: { p_chip: Chip }; Returns: undefined };
       admin_generate_gameweeks: { Args: { p_first_date: string; p_weeks: number }; Returns: number };
       admin_list_users: {
         Args: never;

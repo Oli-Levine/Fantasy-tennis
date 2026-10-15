@@ -17,7 +17,7 @@ export function PlayerSheet({
   squad,
   byId,
   stats,
-  canChangePlayers,
+  isNewManager,
   onClose,
   onCaptain,
   onViceCaptain,
@@ -29,7 +29,7 @@ export function PlayerSheet({
   squad: Squad;
   byId: Map<string, Player>;
   stats?: PlayerStats;
-  canChangePlayers: boolean;
+  isNewManager: boolean;
   onClose: () => void;
   onCaptain: () => void;
   onViceCaptain: () => void;
@@ -113,12 +113,10 @@ export function PlayerSheet({
             </>
           )}
 
-          {canChangePlayers && (
-            <Button variant="ghost" className="w-full justify-start text-destructive" onClick={then(onRemove)}>
-              <Trash2 />
-              Remove from squad
-            </Button>
-          )}
+          <Button variant="ghost" className="w-full justify-start text-destructive" onClick={then(onRemove)}>
+            <Trash2 />
+            {isNewManager ? "Remove from squad" : "Transfer out"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

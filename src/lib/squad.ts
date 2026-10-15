@@ -146,15 +146,9 @@ export function squadProblems(squad: Squad, cost: number, budget: number): strin
 }
 
 /** Why a player can't be added right now (null = they can). */
-export function addBlocker(
-  player: PoolPlayer,
-  squad: Squad,
-  budgetLeft: number,
-  canChangePlayers: boolean,
-): string | null {
+export function addBlocker(player: PoolPlayer, squad: Squad, budgetLeft: number): string | null {
   if (indexOf(squad, player.id) >= 0) return "In your squad";
   if (!player.is_active) return "Unavailable";
-  if (!canChangePlayers) return "Transfers coming soon";
   if (isFull(squad)) return "Squad full";
   if (round1(player.price - budgetLeft) > 0) return `£${round1(player.price - budgetLeft).toFixed(1)}m over budget`;
   return null;
@@ -195,4 +189,45 @@ function shuffle<T>(items: T[], random: () => number): T[] {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+export type TransferRules = {
+  /** Players in the last locked team; null = no locked team yet (changes are free). */
+  baselineIds: string[] | null;
+  freeTransfers: number;
+  hitPoints: number;
+  /** Wildcard / Free Hit active: every transfer is free. */
+  unlimited: boolean;
+};
+
+export type TransferSummary = {
+  /** Players who've left since the last locked team, paired in order with `in`. */
+  out: string[];
+  in: string[];
+  made: number;
+  /** Points deducted, as a positive number. */
+  hit: number;
+  /** Free transfers still unused this gameweek (null = unlimited). */
+  freeLeft: number | null;
+};
+
+/**
+ * Transfers for the coming gameweek, counted against the last locked team
+ * (mirrors private.transfer_state in the database). Undoing a transfer before
+ * the deadline makes it disappear, so it costs nothing.
+ */
+export function transferSummary(squad: Squad, rules: TransferRules): TransferSummary {
+  if (!rules.baselineIds) return { out: [], in: [], made: 0, hit: 0, freeLeft: null };
+  const current = playerIds(squad);
+  const out = rules.baselineIds.filter((id) => !current.includes(id));
+  const added = current.filter((id) => !rules.baselineIds!.includes(id));
+  const made = added.length;
+  if (rules.unlimited) return { out, in: added, made, hit: 0, freeLeft: null };
+  return {
+    out,
+    in: added,
+    made,
+    hit: Math.max(0, made - rules.freeTransfers) * rules.hitPoints,
+    freeLeft: Math.max(0, rules.freeTransfers - made),
+  };
 }

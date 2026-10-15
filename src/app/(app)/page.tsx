@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Sparkles, Users } from "lucide-react";
 import { DeadlineCountdown } from "@/components/app/deadline-countdown";
 import { EmptyState } from "@/components/app/empty-state";
 import { BenchCard, PlayerCard, type PlayerCardData } from "@/components/app/player-card";
 import { StatsHeader } from "@/components/app/stats-header";
 import { Button } from "@/components/ui/button";
 import { requireMember } from "@/lib/auth";
+import { chipInfo } from "@/lib/chips";
 import { formatPrice } from "@/lib/format";
 import { clubTeamLabel, playerPhotoUrl } from "@/lib/players";
 import { BENCH_INDEX, fromPicks, isFull, round1, squadCost } from "@/lib/squad";
@@ -13,7 +14,7 @@ import { loadTeamData } from "@/lib/team-data";
 
 export default async function HomePage() {
   const { user, profile } = await requireMember();
-  const { players, picks, budget, nextGameweek, stats } = await loadTeamData(user.id);
+  const { players, picks, budget, nextGameweek, stats, activeChip } = await loadTeamData(user.id);
 
   const byId = new Map(players.map((p) => [p.id, p]));
   const squad = fromPicks(picks);
@@ -29,7 +30,7 @@ export default async function HomePage() {
       price: player.price,
       photoUrl: playerPhotoUrl(player.photo_path),
       lastPoints: stats[player.id]?.last ?? null,
-      badge: slot.isCaptain ? "C" : slot.isViceCaptain ? "VC" : null,
+      badge: slot.isCaptain ? (activeChip === "triple_captain" ? "TC" : "C") : slot.isViceCaptain ? "VC" : null,
       unavailable: !player.is_active,
     };
   };
@@ -37,6 +38,22 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-4">
+      {activeChip && (
+        <Link
+          href="/team"
+          className="flex items-center gap-3 rounded-panel bg-gold p-4 text-ink shadow-soft transition-transform active:scale-[0.99]"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-ink text-gold">
+            <Sparkles className="size-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-heading font-semibold">
+              {chipInfo(activeChip).name} active{nextGameweek ? ` for GW${nextGameweek.number}` : ""}
+            </span>
+            <span className="block text-sm leading-snug">{chipInfo(activeChip).summary}</span>
+          </span>
+        </Link>
+      )}
       <section className="rounded-panel bg-card p-4 shadow-soft sm:p-5">
         <StatsHeader
           eyebrow={

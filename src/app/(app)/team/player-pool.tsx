@@ -19,7 +19,6 @@ export function PlayerPool({
   players,
   squad,
   budgetLeft,
-  canChangePlayers,
   stats,
   onAdd,
   onRemove,
@@ -28,7 +27,6 @@ export function PlayerPool({
   players: Player[];
   squad: Squad;
   budgetLeft: number;
-  canChangePlayers: boolean;
   stats: Record<string, PlayerStats>;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
@@ -103,7 +101,7 @@ export function PlayerPool({
         <ul className="overflow-hidden rounded-panel bg-card shadow-soft">
           {visible.map((p) => {
             const inSquad = indexOf(squad, p.id) >= 0;
-            const blocker = inSquad ? null : addBlocker(p, squad, budgetLeft, canChangePlayers);
+            const blocker = inSquad ? null : addBlocker(p, squad, budgetLeft);
             const s = stats[p.id];
             return (
               <li
@@ -146,9 +144,8 @@ export function PlayerPool({
                   <button
                     type="button"
                     onClick={() => onRemove(p.id)}
-                    disabled={!canChangePlayers}
                     aria-label={`Remove ${p.name}`}
-                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition-transform active:scale-90 disabled:cursor-default"
+                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition-transform active:scale-90"
                   >
                     <Check className="size-4" />
                   </button>
