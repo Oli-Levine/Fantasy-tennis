@@ -21,7 +21,12 @@ export function describeDbError(error: DbError, what = "That"): string {
       return error.message && !error.message.includes("violates") ? error.message : `${what} has an invalid value.`;
     case "42501":
       return "Only admins can do that.";
+    case "PGRST202":
+      return "The database is missing an update. Re-run the latest file in supabase/migrations in the Supabase SQL Editor.";
     default:
-      return "Something went wrong. Please try again.";
+      // Include the database's own words so problems can be diagnosed.
+      return error?.message
+        ? `Something went wrong: ${error.message}`
+        : "Something went wrong. Please try again.";
   }
 }

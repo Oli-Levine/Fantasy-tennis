@@ -19,7 +19,9 @@ begin
     return null;
   end if;
   -- Two steps so the unique "number" never clashes mid-update.
-  update public.gameweeks set number = number + 100000;
+  -- Supabase's API blocks UPDATE/DELETE without a WHERE clause (pg-safeupdate),
+  -- even inside functions, hence the explicit "where true".
+  update public.gameweeks set number = number + 100000 where true;
   update public.gameweeks g
   set number = r.rn
   from (select id, row_number() over (order by deadline, id) as rn from public.gameweeks) r
