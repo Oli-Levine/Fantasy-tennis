@@ -120,7 +120,7 @@ The owner is building and deploying a website for the first time, so explain eac
 - **GitHub:** repo is `https://github.com/Oli-Levine/Fantasy-tennis`. Work on and push straight to `main` (agreed with the owner: Vercel deploys `main`, and there's no merge step to manage on an iPad).
 - **Vercel:** ✅ imported and deploying `main` automatically, with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set.
 - **Google sign-in:** ✅ set up in Google Cloud and Supabase, and working.
-- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `0007_reset_and_delete.sql` (`0008_playing_and_club_limit.sql` is new — confirm the owner has run it), `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
+- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `0007_reset_and_delete.sql` `0008_playing_and_club_limit.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
 - **Keys:** the project URL and anon key live only in Vercel (and an uncommitted `.env.local`). They must never be written into this file or committed. Tests, builds and screenshots don't need them. No service-role key is in use; if one is ever needed, ask the owner to add it in Vercel themselves.
 - **GitHub Secrets:** not needed.
 
@@ -143,7 +143,7 @@ The owner is building and deploying a website for the first time, so explain eac
 
 ## 13. Progress log & handover (keep this up to date at the end of each phase)
 
-**Done and tested by the owner on their phone:** Phases 1–6.
+**Done and tested by the owner on their phone:** Phases 1–7 and the tweaks below (0007, 0008).
 - Phase 1: app shell, Google sign-in, theme tokens, bottom nav, Vercel deploy.
 - Phase 2: schema + RLS (`0001`, `0002`), join-code onboarding (`/join`: code → team name + display name), fake seed data.
 - Phase 3: Admin hub, Players (photos, CSV import), Scoring rules (archive instead of delete when used), Gameweeks (generator, blank weeks, renumbering), Users (promote/remove), "Delete test data" button (`0003`).
@@ -165,7 +165,7 @@ The owner is building and deploying a website for the first time, so explain eac
   - Home shows last published gameweek's *counted* points per card (captain ×2/×3, "Didn't play", "Subbed on") plus a summary link to the breakdown, via `loadLastScore()` in `src/lib/last-score.ts`. The Team page still shows each player's raw points (player form). `src/lib/scoring-input.ts` turns DB rows into scoring input; a DB test runs it end to end.
   - Known limit: `loadTeamData` reads `player_gameweeks` in one request (Supabase caps at 1000 rows), fine for ~25 weeks × 40 players; page it if the season grows.
 
-- Phase 7 (built, awaiting owner testing): Home polish, Rules page, PWA, mobile QA. No new SQL.
+- Phase 7: Home polish, Rules page, PWA, mobile QA. No new SQL.
   - **PWA:** `src/app/manifest.ts` (standalone, red theme), icons in `public/icons/` (192, 512, maskable 512) and `src/app/apple-icon.png` (180), rendered from an SVG with Playwright. No service worker on purpose: install works without one, and caching per-user pages would risk stale data. `src/components/app/install-prompt.tsx` on Home: Install button on Chrome/Android (`beforeinstallprompt`), Share → Add to Home Screen steps on iPhone/iPad; hidden when installed or dismissed (localStorage).
   - **Rules page:** sections for squad, deadlines, captain/bench, transfers, chips (`CHIPS`), scoring and league. Budget/free transfers/hit come from `club_settings`; the scoring table is generated from active `scoring_rules`, split into on court (`match`) and off court (`other`).
   - **Home:** next-deadline line, league snapshot (top 3 + you), install prompt. Skeleton `loading.tsx` for Team, League, League team, Rules and Admin (`src/components/app/skeletons.tsx`).
