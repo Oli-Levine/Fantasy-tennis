@@ -39,8 +39,10 @@ signed-out visitors, non-members, members and admins.
 - **Keepalive** — a tiny read query (`count(*)` of players) plus an API health check, so the
   free-tier project never pauses for inactivity.
 - **Backup** — `pg_dump` of the `public` and `private` schemas (all game data), as a `.dump`
-  (for `pg_restore`) and a gzipped `.sql`, plus a best-effort data dump of `auth` + `storage`
-  (sign-ins and photo records). Uploaded as a workflow artifact kept for **30 days**; never committed.
+  (for `pg_restore`) and a gzipped `.sql`. Uploaded as a workflow artifact kept for **30 days**;
+  never committed. The repo is public, so artifacts are downloadable by any GitHub user: the
+  `auth` schema (sign-in sessions and refresh tokens) is deliberately **not** backed up. Members
+  just sign in with Google again after a restore.
 
 Repository secrets it needs (GitHub → **Settings → Secrets and variables → Actions**):
 
@@ -50,5 +52,6 @@ Repository secrets it needs (GitHub → **Settings → Secrets and variables →
 | `SUPABASE_URL` | Project Settings → **Data API** → Project URL (`https://<ref>.supabase.co`) |
 | `SUPABASE_ANON_KEY` | Project Settings → **API Keys** → the `anon` `public` key (or the publishable key) |
 
-To restore a backup into an empty Supabase project: run the migrations first, then
+To restore a backup into an empty Supabase project: run the migrations first, have members sign in
+again (their profiles are linked to their Google sign-in), then
 `pg_restore --no-owner --no-privileges --data-only -d "<connection string>" fantasy-tennis-app-<date>.dump`.

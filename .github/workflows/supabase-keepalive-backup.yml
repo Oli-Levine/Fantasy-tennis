@@ -2,8 +2,10 @@
 #
 # 1. Keepalive: a tiny read query (plus an API health check) so the free-tier
 #    project always has activity and never pauses.
-# 2. Backup: pg_dump of the database, uploaded as a workflow artifact kept for
-#    30 days. The dump is never committed to the repo.
+# 2. Backup: pg_dump of the game data (public + private schemas), uploaded as a
+#    workflow artifact kept for 30 days. The dump is never committed to the repo.
+#    The repo is public, so artifacts can be downloaded by any GitHub user: the
+#    auth schema (sign-in sessions and refresh tokens) is deliberately NOT dumped.
 #
 # Secrets (Settings → Secrets and variables → Actions → Repository secrets):
 #   SUPABASE_DB_URL    Session pooler connection string, with the database password filled in
@@ -103,15 +105,6 @@ jobs:
             --no-owner --no-privileges \
             --schema=public --schema=private \
             | gzip -9 > "backup/fantasy-tennis-app-$stamp.sql.gz"
-
-      - name: Dump sign-ins and photo records (auth + storage schemas)
-        # Best effort: Supabase manages these schemas; the app-data dump above is what matters most.
-        continue-on-error: true
-        run: |
-          pg_dump "$SUPABASE_DB_URL" \
-            --format=custom --no-owner --no-privileges --data-only \
-            --schema=auth --schema=storage \
-            --file="backup/fantasy-tennis-auth-storage-$STAMP.dump"
 
       - name: Summary
         run: |
