@@ -1,4 +1,4 @@
-# Fantasy Tennis
+# UOB Tennis Fantasy
 
 A fantasy-football-style league for our university BUCS tennis club. Managers pick a
 squad of club players, captain one each week, and score points from real BUCS results.

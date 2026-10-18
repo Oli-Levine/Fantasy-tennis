@@ -19,7 +19,7 @@ export default async function JoinPage() {
       style={{ paddingTop: "calc(env(safe-area-inset-top) + 2rem)", paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
     >
       <div className="flex items-center justify-between">
-        <LogoMark className="size-10" />
+        <LogoMark className="h-11" />
         <form action="/auth/signout" method="post">
           <button type="submit" className="cursor-pointer text-sm text-muted-foreground underline-offset-4 hover:underline">
             Sign out

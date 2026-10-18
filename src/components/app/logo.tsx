@@ -1,18 +1,17 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-/** Red tennis-ball mark used in the top bar, login screen and favicon. */
+/** The club crest (public/brand/crest.png, cut out of the UOB Tennis logo). Size it by height. */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className={cn("size-8", className)}>
-      {/* Fixed red (not the court red token) so it matches icon.svg and the app icons */}
-      <circle cx="16" cy="16" r="15" fill="#d7192d" />
-      <path
-        d="M4.5 8.5c5.5 2.2 8.5 7.6 7.6 13.8M27.5 23.5c-5.5-2.2-8.5-7.6-7.6-13.8"
-        fill="none"
-        stroke="white"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-      />
-    </svg>
+    <Image
+      src="/brand/crest.png"
+      alt=""
+      aria-hidden="true"
+      width={325}
+      height={384}
+      priority
+      className={cn("h-8 w-auto shrink-0 self-start object-contain", className)}
+    />
   );
 }

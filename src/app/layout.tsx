@@ -9,11 +9,11 @@ import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: {
-    default: "Fantasy Tennis",
-    template: "%s · Fantasy Tennis",
+    default: "UOB Tennis Fantasy",
+    template: "%s · UOB Tennis Fantasy",
   },
-  description: "Fantasy league for our BUCS tennis club.",
-  appleWebApp: { capable: true, title: "Fantasy Tennis", statusBarStyle: "default" },
+  description: "Fantasy league for the University of Birmingham tennis club.",
+  appleWebApp: { capable: true, title: "UOB Tennis", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

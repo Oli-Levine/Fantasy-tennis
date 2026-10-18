@@ -4,14 +4,14 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Fantasy Tennis",
-    short_name: "Fantasy Tennis",
-    description: "Fantasy league for our BUCS tennis club.",
+    name: "UOB Tennis Fantasy",
+    short_name: "UOB Tennis",
+    description: "Fantasy league for the University of Birmingham tennis club.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#0f1d4a",
+    background_color: "#000000",
     theme_color: "#0f1d4a",
     categories: ["sports", "games"],
     icons: [

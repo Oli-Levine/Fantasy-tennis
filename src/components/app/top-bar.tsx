@@ -18,9 +18,9 @@ export function TopBar({
     >
       <div className="mx-auto flex h-topbar max-w-content items-center justify-between px-gutter">
         <Link href="/" className="flex items-center gap-2">
-          <LogoMark className="size-7" />
+          <LogoMark className="h-8" />
           <span className="font-heading text-[17px] font-bold tracking-tight">
-            Fantasy <span className="text-line-yellow">Tennis</span>
+            UOB Tennis <span className="text-line-yellow">Fantasy</span>
           </span>
         </Link>
         <AccountMenu name={name} teamName={teamName} email={email} />

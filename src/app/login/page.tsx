@@ -44,11 +44,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       />
 
       <div className="relative flex flex-1 flex-col justify-end px-6 pb-6">
-        <LogoMark className="mb-6 size-14" />
+        <LogoMark className="mb-6 h-24" />
         <h1 className="text-[2.5rem] leading-[1.05] font-bold">
-          Fantasy
+          UOB Tennis
           <br />
-          <span className="text-primary">Tennis</span>
+          <span className="text-line-yellow">Fantasy</span>
         </h1>
         <p className="mt-3 max-w-xs text-base text-white/70">
           Pick your club squad, captain your star and climb the league.

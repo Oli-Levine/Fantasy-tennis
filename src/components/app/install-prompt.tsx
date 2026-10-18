@@ -77,9 +77,9 @@ export function InstallPrompt() {
 
   return (
     <section className="relative flex gap-3 rounded-panel bg-card p-4 pr-11 shadow-soft" aria-label="Install the app">
-      <LogoMark className="size-10 shrink-0" />
+      <LogoMark className="h-11" />
       <div className="min-w-0 flex-1 text-sm">
-        <p className="font-heading font-semibold">Add Fantasy Tennis to your home screen</p>
+        <p className="font-heading font-semibold">Add UOB Tennis Fantasy to your home screen</p>
         {mode.kind === "android" ? (
           <>
             <p className="mt-0.5 text-muted-foreground">Open it like an app, full screen, in one tap.</p>
