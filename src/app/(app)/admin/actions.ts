@@ -36,3 +36,27 @@ export async function deleteTestDataAction(): Promise<{ ok: boolean; message: st
     message: `Deleted ${data.players} test players, ${data.scoring_rules} rules and ${data.managers} managers`,
   };
 }
+
+/** Clears all gameweek history and past gameweeks, ready for launch. */
+export async function resetSeasonAction(clearSquads: boolean): Promise<{ ok: boolean; message: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_reset_season", { p_clear_squads: clearSquads });
+  if (error) {
+    console.error("admin_reset_season failed", error);
+    return {
+      ok: false,
+      message:
+        error.code === "PGRST202"
+          ? "The database is missing an update. Run supabase/migrations/0007_reset_and_delete.sql first."
+          : `Couldn't restart the season: ${error.message}`,
+    };
+  }
+  revalidatePath("/", "layout");
+  return {
+    ok: true,
+    message:
+      `Season restarted: ${data.gameweeks} past gameweek${data.gameweeks === 1 ? "" : "s"} removed` +
+      (clearSquads ? ` and ${data.squads} squad${data.squads === 1 ? "" : "s"} cleared` : ""),
+  };
+}

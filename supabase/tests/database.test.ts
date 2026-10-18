@@ -19,6 +19,7 @@ const ADMIN_TOOLS = sqlFile("migrations/0003_admin.sql");
 const SQUADS = sqlFile("migrations/0004_squads.sql");
 const TRANSFERS = sqlFile("migrations/0005_transfers_chips.sql");
 const RESULTS = sqlFile("migrations/0006_results.sql");
+const RESET = sqlFile("migrations/0007_reset_and_delete.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -67,6 +68,7 @@ beforeAll(async () => {
     await db.exec(SQUADS);
     await db.exec(TRANSFERS);
     await db.exec(RESULTS);
+    await db.exec(RESET);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
@@ -822,6 +824,59 @@ describe("publishing end to end (same queries as src/lib/recalculate.ts)", () =>
     )).rows.filter((r) => r.team === "Score Draw");
     expect(check).toHaveLength(1);
     expect(check[0].expected_points).toBe(check[0].stored_points);
+  });
+});
+
+describe("deleting players and restarting the season", () => {
+  const count = async (sql: string, params: unknown[] = []) => (await db.query<{ n: number }>(sql, params)).rows[0].n;
+  const deletePlayer = (id: string, uid = ADMIN) => as<{ r: { name: string; squads: number } }>(uid, `select public.admin_delete_player($1) as r`, [id]);
+  const reset = (clearSquads: boolean, uid = ADMIN) =>
+    as<{ r: { entries: number; gameweeks: number; squads: number } }>(uid, `select public.admin_reset_season($1) as r`, [clearSquads]);
+
+  it("won't delete a player with history, and only admins can delete or reset", async () => {
+    const { rows } = await db.query<{ player_id: string }>(`select player_id from public.gameweek_picks where user_id = $1 limit 1`, [PICKER]);
+    await expect(deletePlayer(rows[0].player_id)).rejects.toThrow(/locked team this season/);
+    await expect(deletePlayer(rows[0].player_id, MEMBER)).rejects.toThrow(/Admins only/);
+    await expect(reset(false, MEMBER)).rejects.toThrow(/Admins only/);
+  });
+
+  it("restarts the season: history and past gameweeks go, future ones reopen, squads stay", async () => {
+    const future = await count(`select count(*)::int as n from public.gameweeks where deadline > now()`);
+    await db.query(`update public.gameweeks set status = 'locked' where deadline > now() and id = (select min(id) from public.gameweeks where deadline > now())`);
+    const squadsBefore = await count(`select count(distinct user_id)::int as n from public.squad_picks`);
+
+    const [{ r }] = await reset(false);
+    expect(r.entries).toBeGreaterThan(0);
+    expect(r.gameweeks).toBeGreaterThan(0);
+    expect(r.squads).toBe(0);
+
+    for (const table of ["gameweek_entries", "gameweek_picks", "transfers", "chip_plays", "rule_results", "player_gameweeks"]) {
+      expect(await count(`select count(*)::int as n from public.${table}`)).toBe(0);
+    }
+    expect(await count(`select count(*)::int as n from public.gameweeks where deadline <= now()`)).toBe(0);
+    expect(await count(`select count(*)::int as n from public.gameweeks`)).toBe(future);
+    expect(await count(`select count(*)::int as n from public.gameweeks where status <> 'open'`)).toBe(0);
+    expect(await count(`select count(distinct user_id)::int as n from public.squad_picks`)).toBe(squadsBefore);
+    // Everyone is a new manager again: free changes until the first deadline.
+    expect(await as(PICKER, `select public.get_transfer_state() -> 'baseline_player_ids' as b`)).toEqual([{ b: null }]);
+    // Numbers start from 1 again.
+    expect(await count(`select min(number)::int as n from public.gameweeks`)).toBe(1);
+  });
+
+  it("then deletes a player who is only in current squads, taking them out of those squads", async () => {
+    const { rows } = await db.query<{ player_id: string }>(`select player_id from public.squad_picks where user_id = $1 order by position limit 1`, [PICKER]);
+    const id = rows[0].player_id;
+    const owners = await count(`select count(*)::int as n from public.squad_picks where player_id = $1`, [id]);
+    const [{ r }] = await deletePlayer(id);
+    expect(r.squads).toBe(owners);
+    expect(await count(`select count(*)::int as n from public.players where id = $1`, [id])).toBe(0);
+    expect(await count(`select count(*)::int as n from public.squad_picks where user_id = $1`, [PICKER])).toBe(4);
+  });
+
+  it("can also clear everyone's squads", async () => {
+    const [{ r }] = await reset(true);
+    expect(r.squads).toBeGreaterThan(0);
+    expect(await count(`select count(*)::int as n from public.squad_picks`)).toBe(0);
   });
 });
 

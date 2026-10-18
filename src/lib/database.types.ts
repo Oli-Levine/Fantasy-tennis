@@ -198,6 +198,14 @@ export type Database = {
       get_transfer_state: { Args: never; Returns: TransferState };
       play_chip: { Args: { p_chip: Chip }; Returns: { chip: Chip; gameweek_id: number } };
       cancel_chip: { Args: { p_chip: Chip }; Returns: undefined };
+      admin_reset_season: {
+        Args: { p_clear_squads: boolean };
+        Returns: { entries: number; gameweeks: number; squads: number };
+      };
+      admin_delete_player: {
+        Args: { p_player_id: Uuid };
+        Returns: { name: string; photo_path: string | null; squads: number };
+      };
       admin_save_results: {
         Args: {
           p_gameweek_id: number;

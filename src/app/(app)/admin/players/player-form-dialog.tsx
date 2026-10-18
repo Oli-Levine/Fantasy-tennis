@@ -217,7 +217,7 @@ export function PlayerFormDialog({
             {player && (
               <ConfirmDialog
                 title={`Delete ${player.name}?`}
-                description="This can't be undone. If they're in anyone's squad or history, you'll need to mark them unavailable instead."
+                description="This can't be undone. Anyone who has them in their squad loses them and picks a replacement. If they've already been in a locked team or scored this season, mark them unavailable instead, or restart the season first (Admin page)."
                 confirmLabel="Delete"
                 destructive
                 onConfirm={async () => {

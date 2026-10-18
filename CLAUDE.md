@@ -120,7 +120,7 @@ The owner is building and deploying a website for the first time, so explain eac
 - **GitHub:** repo is `https://github.com/Oli-Levine/Fantasy-tennis`. Work on and push straight to `main` (agreed with the owner: Vercel deploys `main`, and there's no merge step to manage on an iPad).
 - **Vercel:** ✅ imported and deploying `main` automatically, with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set.
 - **Google sign-in:** ✅ set up in Google Cloud and Supabase, and working.
-- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
+- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql` (`0007_reset_and_delete.sql` is new — confirm the owner has run it), `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
 - **Keys:** the project URL and anon key live only in Vercel (and an uncommitted `.env.local`). They must never be written into this file or committed. Tests, builds and screenshots don't need them. No service-role key is in use; if one is ever needed, ask the owner to add it in Vercel themselves.
 - **GitHub Secrets:** not needed.
 
@@ -170,5 +170,10 @@ The owner is building and deploying a website for the first time, so explain eac
   - **Rules page:** sections for squad, deadlines, captain/bench, transfers, chips (`CHIPS`), scoring and league. Budget/free transfers/hit come from `club_settings`; the scoring table is generated from active `scoring_rules`, split into on court (`match`) and off court (`other`).
   - **Home:** next-deadline line, league snapshot (top 3 + you), install prompt. Skeleton `loading.tsx` for Team, League, League team, Rules and Admin (`src/components/app/skeletons.tsx`).
   - `npm run screenshots` now covers every screen including the admin sub-pages and `/league/u3`.
+
+- Post-launch tweaks (`0007_reset_and_delete.sql`):
+  - **Edit team & name:** `/account` (account menu → "Edit team & name"), `updateProfileAction` updates `profiles.team_name`/`display_name` (unique team name enforced by the DB).
+  - **Delete player:** `public.admin_delete_player()` removes the player from current squads and deletes them; refused if they're in any gameweek history (picks, results, transfers).
+  - **Restart the season:** Admin hub card → `public.admin_reset_season(clear_squads)`: deletes all entries/picks/transfers/chips/results/points, reopens future gameweeks and deletes past ones (renumbered from 1), optionally empties squads. Typed "RESTART" confirmation.
 
 **All 7 phases are built.** Out of scope for now (section 9): stats page, mini-leagues, notifications, automatic price changes. Raw `rule_results` are kept for the future stats page.

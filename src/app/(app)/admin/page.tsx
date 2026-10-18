@@ -9,6 +9,7 @@ import { formatLondonDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { DEMO_GAMEWEEKS, DEMO_PLAYERS, DEMO_RULES, DEMO_USERS } from "@/lib/dev-fixtures";
 import { JoinCodeCard } from "./join-code-card";
+import { ResetSeasonCard } from "./reset-season-card";
 import { TestDataCard } from "./test-data-card";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -79,6 +80,7 @@ export default async function AdminPage() {
 
       <JoinCodeCard code={o.joinCode} />
       {hasTestData && <TestDataCard counts={o.testData} />}
+      <ResetSeasonCard />
     </div>
   );
 }

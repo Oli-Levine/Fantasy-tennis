@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Pencil } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,12 @@ export function AccountMenu({
             <div className="truncate text-xs font-normal text-muted-foreground">{email}</div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link href="/account">
+              <Pencil />
+              Edit team &amp; name
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onSelect={() => signOutForm.current?.requestSubmit()}>
             <LogOut />
             Sign out

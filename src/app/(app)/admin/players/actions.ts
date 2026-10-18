@@ -65,19 +65,17 @@ export async function setPlayerPhoto(id: string, path: string | null): Promise<A
 export async function deletePlayer(id: string): Promise<ActionResult> {
   await requireAdmin();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("players").delete().eq("id", id).select("name, photo_path");
-  if (error) {
-    return fail(
-      error.code === "23503"
-        ? "This player is in someone's squad or history. Mark them as unavailable instead."
-        : describeDbError(error, "That player"),
-    );
-  }
-  const deleted = data?.[0];
-  if (!deleted) return fail("That player no longer exists.");
-  if (deleted.photo_path) await supabase.storage.from(PHOTO_BUCKET).remove([deleted.photo_path]);
+  // Removes them from current squads too; refused if they have history this season.
+  const { data, error } = await supabase.rpc("admin_delete_player", { p_player_id: id });
+  if (error) return fail(describeDbError(error, "That player"));
+  if (data.photo_path) await supabase.storage.from(PHOTO_BUCKET).remove([data.photo_path]);
   refresh();
-  return ok(undefined, `${deleted.name} deleted`);
+  return ok(
+    undefined,
+    data.squads
+      ? `${data.name} deleted and removed from ${data.squads} squad${data.squads === 1 ? "" : "s"}`
+      : `${data.name} deleted`,
+  );
 }
 
 /**
