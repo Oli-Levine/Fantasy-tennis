@@ -27,3 +27,8 @@ test-results/
 playwright-report/
 !.env.example
 screenshots/
+
+# database backups (kept as GitHub Actions artifacts, never committed)
+backup/
+*.dump
+*.sql.gz

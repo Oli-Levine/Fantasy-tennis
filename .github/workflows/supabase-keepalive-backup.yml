@@ -1,0 +1,134 @@
+# Daily Supabase keepalive + database backup.
+#
+# 1. Keepalive: a tiny read query (plus an API health check) so the free-tier
+#    project always has activity and never pauses.
+# 2. Backup: pg_dump of the database, uploaded as a workflow artifact kept for
+#    30 days. The dump is never committed to the repo.
+#
+# Secrets (Settings → Secrets and variables → Actions → Repository secrets):
+#   SUPABASE_DB_URL    Session pooler connection string, with the database password filled in
+#   SUPABASE_URL       Project URL, e.g. https://abcd1234.supabase.co
+#   SUPABASE_ANON_KEY  The anon / publishable API key
+# See supabase/README.md ("Daily keepalive and backups") for where to find each one.
+
+name: Supabase keepalive & backup
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # every day at 03:17 UTC
+  workflow_dispatch: # "Run workflow" button on the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive-backup
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash # -eo pipefail: any failing command (even inside a pipe) fails the step
+
+env:
+  # pg_dump must be at least as new as the server (Supabase runs Postgres 15 or 17).
+  PG_CLIENT_VERSION: "17"
+
+jobs:
+  keepalive:
+    name: Keepalive
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - name: Check the secrets are set
+        run: |
+          missing=0
+          for name in SUPABASE_DB_URL SUPABASE_URL SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::Missing repository secret $name"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Install the Postgres client
+        run: sudo apt-get install -y -qq postgresql-client > /dev/null
+
+      - name: Read query against the database
+        env:
+          PGCONNECT_TIMEOUT: "30"
+        run: |
+          psql "$SUPABASE_DB_URL" --no-psqlrc --tuples-only --set ON_ERROR_STOP=1 \
+            --command "select 'players: ' || count(*) from public.players;"
+
+      - name: Ping the Supabase API
+        run: |
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            "${SUPABASE_URL%/}/auth/v1/health")
+          echo "Auth API responded with HTTP $status"
+          [ "$status" = "200" ] || { echo "::error::Supabase API health check failed (HTTP $status)"; exit 1; }
+
+  backup:
+    name: Backup (pg_dump)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PGCONNECT_TIMEOUT: "30"
+    steps:
+      - name: Check the secret is set
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "::error::Missing repository secret SUPABASE_DB_URL"; exit 1; fi
+
+      - name: Install pg_dump ${{ env.PG_CLIENT_VERSION }}
+        run: |
+          sudo apt-get install -y -qq postgresql-common > /dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+          sudo apt-get install -y -qq "postgresql-client-${PG_CLIENT_VERSION}" > /dev/null
+          echo "/usr/lib/postgresql/${PG_CLIENT_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Dump the app data (public + private schemas)
+        run: |
+          mkdir -p backup
+          stamp=$(date -u +%Y-%m-%d)
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+          pg_dump --version
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=custom --no-owner --no-privileges \
+            --schema=public --schema=private \
+            --file="backup/fantasy-tennis-app-$stamp.dump"
+          # Plain-SQL copy too, so it can be read without pg_restore.
+          pg_dump "$SUPABASE_DB_URL" \
+            --no-owner --no-privileges \
+            --schema=public --schema=private \
+            | gzip -9 > "backup/fantasy-tennis-app-$stamp.sql.gz"
+
+      - name: Dump sign-ins and photo records (auth + storage schemas)
+        # Best effort: Supabase manages these schemas; the app-data dump above is what matters most.
+        continue-on-error: true
+        run: |
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=custom --no-owner --no-privileges --data-only \
+            --schema=auth --schema=storage \
+            --file="backup/fantasy-tennis-auth-storage-$STAMP.dump"
+
+      - name: Summary
+        run: |
+          ls -lh backup
+          {
+            echo "### Backup $STAMP"
+            echo
+            echo '| File | Size |'
+            echo '| ---- | ---- |'
+            for f in backup/*; do echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the backup (kept 30 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ env.STAMP }}-run${{ github.run_number }}
+          path: backup/
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0 # already compressed

@@ -30,3 +30,25 @@ Migrations are safe to run again. Later phases add `0005_…`, `0006_…`; run e
 `npm test` runs every file here against a real Postgres engine (PGlite) with a small
 Supabase stand-in (`tests/supabase-stub.sql`), and checks the security rules as
 signed-out visitors, non-members, members and admins.
+
+## Daily keepalive and backups (GitHub Actions)
+
+`.github/workflows/supabase-keepalive-backup.yml` runs every day at 03:17 UTC (and on demand from
+**Actions → Supabase keepalive & backup → Run workflow**):
+
+- **Keepalive** — a tiny read query (`count(*)` of players) plus an API health check, so the
+  free-tier project never pauses for inactivity.
+- **Backup** — `pg_dump` of the `public` and `private` schemas (all game data), as a `.dump`
+  (for `pg_restore`) and a gzipped `.sql`, plus a best-effort data dump of `auth` + `storage`
+  (sign-ins and photo records). Uploaded as a workflow artifact kept for **30 days**; never committed.
+
+Repository secrets it needs (GitHub → **Settings → Secrets and variables → Actions**):
+
+| Secret | Where to find it in Supabase |
+| ------ | ---------------------------- |
+| `SUPABASE_DB_URL` | **Connect** (top of the project) → **Connection string** → **Session pooler** URI, with `[YOUR-PASSWORD]` replaced by the database password (Project Settings → Database → Reset database password if you don't have it). Use the *session pooler*, not the direct connection: GitHub's runners can't reach the direct (IPv6-only) address. |
+| `SUPABASE_URL` | Project Settings → **Data API** → Project URL (`https://<ref>.supabase.co`) |
+| `SUPABASE_ANON_KEY` | Project Settings → **API Keys** → the `anon` `public` key (or the publishable key) |
+
+To restore a backup into an empty Supabase project: run the migrations first, then
+`pg_restore --no-owner --no-privileges --data-only -d "<connection string>" fantasy-tennis-app-<date>.dump`.

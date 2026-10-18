@@ -122,7 +122,7 @@ The owner is building and deploying a website for the first time, so explain eac
 - **Google sign-in:** ✅ set up in Google Cloud and Supabase, and working.
 - **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `0007_reset_and_delete.sql` `0008_playing_and_club_limit.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
 - **Keys:** the project URL and anon key live only in Vercel (and an uncommitted `.env.local`). They must never be written into this file or committed. Tests, builds and screenshots don't need them. No service-role key is in use; if one is ever needed, ask the owner to add it in Vercel themselves.
-- **GitHub Secrets:** not needed.
+- **GitHub Secrets:** `SUPABASE_DB_URL` (session pooler URI with password), `SUPABASE_URL`, `SUPABASE_ANON_KEY` — used only by `.github/workflows/supabase-keepalive-backup.yml` (daily keepalive query + `pg_dump` backup uploaded as a 30-day artifact; dumps are gitignored and never committed). See `supabase/README.md`.
 
 ---
 
