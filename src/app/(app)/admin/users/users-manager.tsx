@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, Shield, ShieldOff, UserCheck, UserMinus, UserX } from "lucide-react";
+import { ClipboardList, ClipboardX, MoreVertical, Shield, ShieldOff, UserCheck, UserMinus, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Database } from "@/lib/database.types";
+import type { Database, Role } from "@/lib/database.types";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { removeUser, setPlaying, setRole } from "./actions";
@@ -23,9 +23,9 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  function changeRole(user: AdminUser) {
+  function changeRole(user: AdminUser, role: Role) {
     startTransition(async () => {
-      const result = await setRole(user.id, user.role === "admin" ? "user" : "admin");
+      const result = await setRole(user.id, role);
       if (!result.ok) return void toast.error(result.error);
       toast.success(`${user.display_name}: ${result.message?.toLowerCase()}`);
       router.refresh();
@@ -55,8 +55,14 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
             {user.is_playing ? "Not playing (hide from league)" : "Playing (show in league)"}
           </DropdownMenuItem>
         )}
+        {user.joined_at && openRemove && user.role !== "admin" && (
+          <DropdownMenuItem onSelect={() => changeRole(user, user.role === "captain" ? "user" : "captain")}>
+            {user.role === "captain" ? <ClipboardX /> : <ClipboardList />}
+            {user.role === "captain" ? "Remove team captain" : "Make team captain (enters results)"}
+          </DropdownMenuItem>
+        )}
         {user.joined_at && openRemove && (
-          <DropdownMenuItem onSelect={() => changeRole(user)}>
+          <DropdownMenuItem onSelect={() => changeRole(user, user.role === "admin" ? "user" : "admin")}>
             {user.role === "admin" ? <ShieldOff /> : <Shield />}
             {user.role === "admin" ? "Remove admin" : "Make admin"}
           </DropdownMenuItem>
@@ -96,6 +102,7 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
               <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
               <span className="mt-1 flex flex-wrap gap-1">
                 {user.role === "admin" && <Tag tone="gold">Admin</Tag>}
+                {user.role === "captain" && <Tag tone="ink">Team captain</Tag>}
                 {!user.joined_at && <Tag tone="danger">Not joined</Tag>}
                 {user.is_test_data && <Tag>Test</Tag>}
                 {user.joined_at && !user.is_playing && <Tag>Not playing</Tag>}
@@ -129,13 +136,14 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
   );
 }
 
-function Tag({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "gold" | "danger" }) {
+function Tag({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "gold" | "danger" | "ink" }) {
   return (
     <span
       className={cn(
         "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
         tone === "gold" && "bg-gold-soft text-gold-ink",
         tone === "danger" && "bg-primary-soft text-primary",
+        tone === "ink" && "bg-ink text-white",
         tone === "muted" && "bg-muted text-muted-foreground",
       )}
     >

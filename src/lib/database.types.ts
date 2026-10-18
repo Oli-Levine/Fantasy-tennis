@@ -7,7 +7,7 @@
 type Timestamp = string;
 type Uuid = string;
 
-export type Role = "user" | "admin";
+export type Role = "user" | "captain" | "admin";
 export type RuleType = "tick" | "count";
 export type RuleCategory = "match" | "other";
 export type GameweekStatus = "open" | "locked" | "published";
@@ -143,6 +143,9 @@ export type PlayerGameweek = {
   player_id: Uuid;
   did_not_play: boolean;
   points: number | null;
+  /** Who last saved this player's results (null if their account was removed). */
+  entered_by: Uuid | null;
+  entered_at: Timestamp | null;
   updated_at: Timestamp;
 };
 
@@ -186,6 +189,7 @@ export type Database = {
     Functions: {
       is_member: { Args: never; Returns: boolean };
       is_admin: { Args: never; Returns: boolean };
+      can_enter_results: { Args: never; Returns: boolean };
       join_club: { Args: { p_code: string }; Returns: boolean };
       get_join_code: { Args: never; Returns: string };
       set_join_code: { Args: { p_code: string }; Returns: string };
@@ -209,6 +213,13 @@ export type Database = {
       admin_delete_player: {
         Args: { p_player_id: Uuid };
         Returns: { name: string; photo_path: string | null; squads: number };
+      };
+      save_results: {
+        Args: {
+          p_gameweek_id: number;
+          p_results: { player_id: Uuid; did_not_play: boolean; counts: Record<Uuid, number> }[];
+        };
+        Returns: number;
       };
       admin_save_results: {
         Args: {

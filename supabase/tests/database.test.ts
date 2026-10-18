@@ -21,6 +21,7 @@ const TRANSFERS = sqlFile("migrations/0005_transfers_chips.sql");
 const RESULTS = sqlFile("migrations/0006_results.sql");
 const RESET = sqlFile("migrations/0007_reset_and_delete.sql");
 const PLAYING = sqlFile("migrations/0008_playing_and_club_limit.sql");
+const CAPTAINS = sqlFile("migrations/0009_team_captains.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -31,6 +32,8 @@ const OUTSIDER = "44444444-4444-4444-8444-444444444444"; // signed in, never ent
 const FAKE_MANAGER_1 = "00000000-0000-4000-a000-000000000001";
 const PICKER = "55555555-5555-4555-8555-555555555555"; // picks a squad in the Phase 4 tests
 const SCORER = "66666666-6666-4666-8666-666666666666"; // scored end to end in the Phase 6 tests
+const CAPTAIN = "99999999-9999-4999-8999-999999999991"; // a team captain (enters results, can't publish)
+const CAPTAIN_2 = "99999999-9999-4999-8999-999999999992";
 
 let db: PGlite;
 
@@ -71,6 +74,7 @@ beforeAll(async () => {
     await db.exec(RESULTS);
     await db.exec(RESET);
     await db.exec(PLAYING);
+    await db.exec(CAPTAINS);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
@@ -828,6 +832,92 @@ describe("publishing end to end (same queries as src/lib/recalculate.ts)", () =>
     )).rows.filter((r) => r.team === "Score Draw");
     expect(check).toHaveLength(1);
     expect(check[0].expected_points).toBe(check[0].stored_points);
+  });
+});
+
+describe("team captains", () => {
+  let gw: number;
+  let players: string[];
+  let tickRule: string;
+  let countRule: string;
+
+  const save = (uid: string, results: unknown) =>
+    as(uid, `select public.save_results($1, $2::jsonb) as n`, [gw, JSON.stringify(results)]);
+  const rows = async () =>
+    (await db.query<{ player_id: string; did_not_play: boolean; entered_by: string | null; n: number }>(
+      `select pg.player_id, pg.did_not_play, pg.entered_by,
+              (select coalesce(sum(count), 0)::int from public.rule_results rr
+               where rr.gameweek_id = pg.gameweek_id and rr.player_id = pg.player_id) as n
+       from public.player_gameweeks pg where pg.gameweek_id = $1`,
+      [gw],
+    )).rows;
+
+  beforeAll(async () => {
+    for (const [id, name] of [[CAPTAIN, "Cara Captain"], [CAPTAIN_2, "Cal Captain"]]) {
+      await signUp(id, `${name.split(" ")[0].toLowerCase()}@example.com`, name);
+      await as(id, `select public.join_club($1)`, [await joinCode()]);
+    }
+    const [row] = await as<{ id: number }>(
+      ADMIN,
+      `insert into public.gameweeks (number, deadline, status) values (960, now() - interval '1 hour', 'locked') returning id`,
+    );
+    gw = row.id;
+    players = (await db.query<{ id: string }>(`select id from public.players order by name limit 3`)).rows.map((r) => r.id);
+    tickRule = (await db.query<{ id: string }>(`select id from public.scoring_rules where type = 'tick' limit 1`)).rows[0].id;
+    countRule = (await db.query<{ id: string }>(`select id from public.scoring_rules where type = 'count' limit 1`)).rows[0].id;
+  });
+
+  it("only admins can make someone a captain, and the last admin can't step down", async () => {
+    await expect(as(MEMBER, `select public.set_user_role($1, 'captain')`, [CAPTAIN])).rejects.toThrow(/Admins only/);
+    await as(ADMIN, `select public.set_user_role($1, 'captain')`, [CAPTAIN]);
+    await as(ADMIN, `select public.set_user_role($1, 'captain')`, [CAPTAIN_2]);
+    await expect(as(ADMIN, `select public.set_user_role($1, 'boss')`, [MEMBER])).rejects.toThrow(/Unknown role/);
+    await expect(as(ADMIN, `select public.set_user_role($1, 'captain')`, [ADMIN])).rejects.toThrow(/at least one admin/);
+    await expect(as(CAPTAIN, `update public.profiles set role = 'admin' where id = $1`, [CAPTAIN])).rejects.toThrow(/permission denied/);
+    expect(await as(CAPTAIN, `select public.can_enter_results() as ok, public.is_admin() as admin`)).toEqual([{ ok: true, admin: false }]);
+    expect(await as(MEMBER, `select public.can_enter_results() as ok`)).toEqual([{ ok: false }]);
+  });
+
+  it("lets captains save drafts that only change the players they sent", async () => {
+    await expect(save(MEMBER, [])).rejects.toThrow(/Only team captains and admins/);
+    await save(CAPTAIN, [{ player_id: players[0], did_not_play: false, counts: { [tickRule]: 1, [countRule]: 2 } }]);
+    await save(CAPTAIN_2, [{ player_id: players[1], did_not_play: true, counts: {} }]);
+    expect(await rows()).toEqual(
+      expect.arrayContaining([
+        { player_id: players[0], did_not_play: false, entered_by: CAPTAIN, n: 3 },
+        { player_id: players[1], did_not_play: true, entered_by: CAPTAIN_2, n: 0 },
+      ]),
+    );
+    expect(await rows()).toHaveLength(2);
+
+    // Clearing a player removes only their results.
+    await save(CAPTAIN_2, [{ player_id: players[0], did_not_play: false, counts: {} }]);
+    expect(await rows()).toEqual([{ player_id: players[1], did_not_play: true, entered_by: CAPTAIN_2, n: 0 }]);
+  });
+
+  it("lets captains read drafts but not write to the tables directly", async () => {
+    expect(await as(CAPTAIN, `select count(*)::int as n from public.player_gameweeks where gameweek_id = $1`, [gw])).toEqual([{ n: 1 }]);
+    expect(await as(MEMBER, `select count(*)::int as n from public.player_gameweeks where gameweek_id = $1`, [gw])).toEqual([{ n: 0 }]);
+    await expect(
+      as(CAPTAIN, `insert into public.rule_results (gameweek_id, player_id, rule_id, count) values ($1, $2, $3, 1)`, [gw, players[2], tickRule]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("leaves publishing and published gameweeks to admins", async () => {
+    await expect(
+      as(CAPTAIN, `select public.admin_store_points($1, '[]'::jsonb, '[]'::jsonb, true)`, [gw]),
+    ).rejects.toThrow(/Admins only/);
+    await as(ADMIN, `select public.admin_store_points($1, '[]'::jsonb, '[]'::jsonb, true)`, [gw]);
+    await expect(save(CAPTAIN, [{ player_id: players[2], did_not_play: true, counts: {} }])).rejects.toThrow(
+      /already published, so only an admin/,
+    );
+    await save(ADMIN, [{ player_id: players[2], did_not_play: true, counts: {} }]);
+    expect(await rows()).toHaveLength(2);
+  });
+
+  it("keeps results when a captain's account is removed", async () => {
+    await as(ADMIN, `select public.remove_user($1)`, [CAPTAIN_2]);
+    expect((await rows()).find((r) => r.player_id === players[1])).toMatchObject({ entered_by: null, did_not_play: true });
   });
 });
 

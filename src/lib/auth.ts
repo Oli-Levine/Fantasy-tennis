@@ -22,6 +22,8 @@ export type Member = {
   user: CurrentUser;
   profile: Profile & { team_name: string; joined_at: string };
   isAdmin: boolean;
+  /** Team captains and admins can enter results (only admins publish). */
+  canEnterResults: boolean;
 };
 
 const DEV_VIEWER: Viewer = {
@@ -65,7 +67,7 @@ export const getViewer = cache(async (): Promise<Viewer> => {
   };
 });
 
-/** Local dev only: DEV_PROFILE=outsider|joined|member previews each onboarding state. */
+/** Local dev only: DEV_PROFILE=outsider|joined|member|captain previews each state. */
 function devViewer(): Viewer {
   const profile = DEV_VIEWER.profile!;
   switch (process.env.DEV_PROFILE) {
@@ -75,6 +77,8 @@ function devViewer(): Viewer {
       return { ...DEV_VIEWER, profile: { ...profile, team_name: null, role: "user" } };
     case "member":
       return { ...DEV_VIEWER, profile: { ...profile, role: "user" } };
+    case "captain":
+      return { ...DEV_VIEWER, profile: { ...profile, role: "captain" } };
     default:
       return DEV_VIEWER;
   }
@@ -89,7 +93,12 @@ export function isOnboarded(profile: Profile | null): profile is Member["profile
 export async function requireMember(): Promise<Member> {
   const { user, profile } = await getViewer();
   if (!isOnboarded(profile)) redirect("/join");
-  return { user, profile, isAdmin: profile.role === "admin" };
+  return {
+    user,
+    profile,
+    isAdmin: profile.role === "admin",
+    canEnterResults: profile.role === "admin" || profile.role === "captain",
+  };
 }
 
 /**
@@ -99,5 +108,12 @@ export async function requireMember(): Promise<Member> {
 export async function requireAdmin(): Promise<Member> {
   const member = await requireMember();
   if (!member.isAdmin) redirect("/");
+  return member;
+}
+
+/** A team captain or admin (results entry), or a redirect home. The database enforces this too. */
+export async function requireResultsEntry(): Promise<Member> {
+  const member = await requireMember();
+  if (!member.canEnterResults) redirect("/");
   return member;
 }

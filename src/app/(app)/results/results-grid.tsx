@@ -20,16 +20,16 @@ import { saveResultsAction } from "./actions";
 type Results = Record<string, PlayerResult>;
 const EMPTY: PlayerResult = { didNotPlay: false, counts: {} };
 
-/** Drops empty rows so "changed?" compares like with like. */
-function normalise(results: Results): string {
-  const rows = Object.entries(results)
-    .map(([id, r]) => {
-      const counts = Object.entries(r.counts).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
-      return [id, r.didNotPlay, counts] as const;
-    })
-    .filter(([, dnp, counts]) => dnp || counts.length > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
-  return JSON.stringify(rows);
+/** One player's result as text ("" if empty), so "changed?" compares like with like. */
+function rowKey(r: PlayerResult | undefined): string {
+  if (!r) return "";
+  const counts = Object.entries(r.counts).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
+  return r.didNotPlay || counts.length > 0 ? JSON.stringify([r.didNotPlay, counts]) : "";
+}
+
+/** Only the edits that still differ from what's saved. */
+function changedOnly(edits: Results, saved: Results): Results {
+  return Object.fromEntries(Object.entries(edits).filter(([id, r]) => rowKey(r) !== rowKey(saved[id])));
 }
 
 export function ResultsGrid({
@@ -40,16 +40,29 @@ export function ResultsGrid({
   results: saved,
   pickedBy,
   managers,
-}: ResultsData & { gameweek: NonNullable<ResultsData["gameweek"]> }) {
+  enteredBy,
+  isAdmin,
+}: ResultsData & { gameweek: NonNullable<ResultsData["gameweek"]>; isAdmin: boolean }) {
   const router = useRouter();
-  const [results, setResults] = useState<Results>(saved);
+  // Only this person's edits are kept locally; everything else follows the
+  // saved results, so other captains' saves show up after each refresh.
+  const [edits, setEdits] = useState<Results>({});
+  const [prevSaved, setPrevSaved] = useState(saved);
+  if (saved !== prevSaved) {
+    setPrevSaved(saved);
+    setEdits((e) => changedOnly(e, saved));
+  }
+  const results = useMemo(() => ({ ...saved, ...edits }), [saved, edits]);
   const [query, setQuery] = useState("");
   const [team, setTeam] = useState<number | null>(null);
   const [pickedOnly, setPickedOnly] = useState(Object.keys(pickedBy).length > 0);
   const [saving, startSaving] = useTransition();
 
-  const dirty = normalise(results) !== normalise(saved);
+  const changes = useMemo(() => changedOnly(edits, saved), [edits, saved]);
+  const changed = Object.keys(changes).length;
+  const dirty = changed > 0;
   const published = gameweek.status === "published";
+  const readOnly = published && !isAdmin;
 
   // Don't lose a half-entered grid by navigating away.
   useEffect(() => {
@@ -70,16 +83,19 @@ export function ResultsGrid({
   }, [players, query, team, pickedOnly, pickedBy, results]);
 
   const update = (playerId: string, change: (r: PlayerResult) => PlayerResult) =>
-    setResults((all) => ({ ...all, [playerId]: change(all[playerId] ?? EMPTY) }));
+    setEdits((all) => ({ ...all, [playerId]: change(all[playerId] ?? saved[playerId] ?? EMPTY) }));
   const setCount = (playerId: string, ruleId: string, n: number) =>
     update(playerId, (r) => ({ ...r, counts: { ...r.counts, [ruleId]: Math.max(0, Math.min(99, n)) } }));
 
-  const entered = Object.values(results).filter((r) => r.didNotPlay || Object.values(r.counts).some((n) => n > 0)).length;
+  const entered = Object.values(results).filter((r) => rowKey(r) !== "").length;
+  const enterers = Object.entries(
+    Object.values(enteredBy).reduce<Record<string, number>>((all, name) => ({ ...all, [name]: (all[name] ?? 0) + 1 }), {}),
+  ).sort(([, a], [, b]) => b - a);
 
   function save(publish: boolean) {
     return new Promise<boolean>((resolve) =>
       startSaving(async () => {
-        const result = await saveResultsAction(gameweek.id, results, publish);
+        const result = await saveResultsAction(gameweek.id, changes, publish);
         if (!result.ok) {
           toast.error(result.error);
           resolve(false);
@@ -100,7 +116,7 @@ export function ResultsGrid({
           value={gameweek.id}
           onChange={(e) => {
             if (dirty && !window.confirm("You have unsaved results. Leave without saving?")) return;
-            router.push(`/admin/results?gw=${e.target.value}`);
+            router.push(`/results?gw=${e.target.value}`);
           }}
         >
           {gameweeks.map((g) => (
@@ -112,12 +128,25 @@ export function ResultsGrid({
         <p className="text-sm text-muted-foreground">
           Deadline {formatLondonDateTime(new Date(gameweek.deadline))} · {managers} team{managers === 1 ? "" : "s"} locked
           in.{" "}
-          {published ? (
+          {readOnly ? (
+            <span className="font-medium text-foreground">Published: ask an admin if something needs correcting.</span>
+          ) : published ? (
             <span className="font-medium text-foreground">Published: saving changes recalculates everyone&apos;s points.</span>
           ) : (
             <span className="font-medium text-foreground">Draft: members can&apos;t see these results yet.</span>
           )}
         </p>
+        {enterers.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Entered by{" "}
+            {enterers.map(([name, n], i) => (
+              <span key={name}>
+                {i > 0 && " · "}
+                <span className="font-medium text-foreground">{name}</span> ({n})
+              </span>
+            ))}
+          </p>
+        )}
       </section>
 
       <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -204,6 +233,9 @@ export function ResultsGrid({
                     rules={rules}
                     result={results[p.id] ?? EMPTY}
                     pickedBy={pickedBy[p.id] ?? 0}
+                    enteredBy={enteredBy[p.id]}
+                    changed={p.id in changes}
+                    readOnly={readOnly}
                     onDidNotPlay={(v) => update(p.id, (r) => ({ ...r, didNotPlay: v }))}
                     onCount={(ruleId, n) => setCount(p.id, ruleId, n)}
                   />
@@ -220,52 +252,62 @@ export function ResultsGrid({
       </p>
 
       {/* Save bar, just above the bottom navigation */}
-      <div
-        className="fixed inset-x-0 z-30 px-gutter"
-        style={{ bottom: "calc(var(--nav-height) + env(safe-area-inset-bottom) + 0.75rem)" }}
-      >
-        <div className="mx-auto flex max-w-content items-center gap-2 rounded-2xl bg-ink p-3 pl-4 text-white shadow-lifted">
-          <p className="min-w-0 flex-1 text-sm leading-snug">
-            {dirty ? "Unsaved changes" : `${entered} player${entered === 1 ? "" : "s"} with results`}
-          </p>
-          {!published && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/10"
-              disabled={saving || !dirty}
-              onClick={() => save(false)}
-            >
-              Save draft
-            </Button>
-          )}
-          {published ? (
-            <Button size="sm" disabled={saving || !dirty} onClick={() => save(false)}>
-              {saving ? "Saving…" : "Save & recalculate"}
-            </Button>
-          ) : (
-            <ConfirmDialog
-              title={`Publish gameweek ${gameweek.number}?`}
-              description={
-                <div className="space-y-2">
-                  <p>
-                    Points will be calculated for {entered} player{entered === 1 ? "" : "s"} and {managers} team
-                    {managers === 1 ? "" : "s"}, and everyone will see them on the League page.
-                  </p>
-                  <p>You can still correct results afterwards; points recalculate automatically.</p>
-                </div>
-              }
-              confirmLabel="Publish"
-              onConfirm={() => save(true)}
-              trigger={(open) => (
-                <Button size="sm" disabled={saving} onClick={open}>
-                  {saving ? "Saving…" : "Publish"}
-                </Button>
-              )}
-            />
-          )}
+      {!readOnly && (
+        <div
+          className="fixed inset-x-0 z-30 px-gutter"
+          style={{ bottom: "calc(var(--nav-height) + env(safe-area-inset-bottom) + 0.75rem)" }}
+        >
+          <div className="mx-auto flex max-w-content items-center gap-2 rounded-2xl bg-ink p-3 pl-4 text-white shadow-lifted">
+            <p className="min-w-0 flex-1 text-sm leading-snug">
+              {dirty
+                ? `${changed} unsaved change${changed === 1 ? "" : "s"}`
+                : `${entered} player${entered === 1 ? "" : "s"} with results`}
+            </p>
+            {published ? (
+              <Button size="sm" disabled={saving || !dirty} onClick={() => save(false)}>
+                {saving ? "Saving…" : "Save & recalculate"}
+              </Button>
+            ) : (
+              <Button
+                variant={isAdmin ? "ghost" : "default"}
+                size="sm"
+                className={cn(isAdmin && "text-white hover:bg-white/10")}
+                disabled={saving || !dirty}
+                onClick={() => save(false)}
+              >
+                {saving && !isAdmin ? "Saving…" : "Save draft"}
+              </Button>
+            )}
+            {isAdmin && !published && (
+              <ConfirmDialog
+                title={`Publish gameweek ${gameweek.number}?`}
+                description={
+                  <div className="space-y-2">
+                    <p>
+                      Points will be calculated for {entered} player{entered === 1 ? "" : "s"} and {managers} team
+                      {managers === 1 ? "" : "s"}, and everyone will see them on the League page.
+                    </p>
+                    {enterers.length > 0 && (
+                      <p>
+                        Entered by {enterers.map(([name, n]) => `${name} (${n})`).join(", ")}. Check every captain has
+                        saved their results first.
+                      </p>
+                    )}
+                    <p>You can still correct results afterwards; points recalculate automatically.</p>
+                  </div>
+                }
+                confirmLabel="Yes, publish"
+                onConfirm={() => save(true)}
+                trigger={(open) => (
+                  <Button size="sm" disabled={saving} onClick={open}>
+                    {saving ? "Saving…" : "Publish"}
+                  </Button>
+                )}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
       <div className="h-20" aria-hidden="true" />
     </div>
   );
@@ -276,6 +318,9 @@ function ResultRow({
   rules,
   result,
   pickedBy,
+  enteredBy,
+  changed,
+  readOnly,
   onDidNotPlay,
   onCount,
 }: {
@@ -283,11 +328,14 @@ function ResultRow({
   rules: ScoringRule[];
   result: PlayerResult;
   pickedBy: number;
+  enteredBy: string | undefined;
+  changed: boolean;
+  readOnly: boolean;
   onDidNotPlay: (value: boolean) => void;
   onCount: (ruleId: string, n: number) => void;
 }) {
   const points = playerPoints(result, rules);
-  const hasAny = result.didNotPlay || Object.values(result.counts).some((n) => n > 0);
+  const hasAny = rowKey(result) !== "";
   return (
     <tr className={cn(result.didNotPlay && "bg-muted/50")}>
       <th
@@ -310,6 +358,11 @@ function ResultRow({
             </>
           )}
         </span>
+        {(changed || (hasAny && enteredBy)) && (
+          <span className={cn("block truncate text-[11px]", changed ? "font-medium text-primary" : "text-muted-foreground")}>
+            {changed ? "Not saved yet" : `by ${enteredBy}`}
+          </span>
+        )}
       </th>
       <td className="border-b border-border text-center">
         <TickBox
@@ -317,6 +370,7 @@ function ResultRow({
           onChange={onDidNotPlay}
           label={`${player.name} didn't play`}
           tone="ink"
+          disabled={readOnly}
         />
       </td>
       {rules.map((rule) => {
@@ -324,9 +378,14 @@ function ResultRow({
         return (
           <td key={rule.id} className="border-b border-border px-1 text-center">
             {rule.type === "tick" ? (
-              <TickBox checked={n > 0} onChange={(v) => onCount(rule.id, v ? 1 : 0)} label={`${player.name}: ${rule.name}`} />
+              <TickBox
+                checked={n > 0}
+                onChange={(v) => onCount(rule.id, v ? 1 : 0)}
+                label={`${player.name}: ${rule.name}`}
+                disabled={readOnly}
+              />
             ) : (
-              <Stepper value={n} onChange={(v) => onCount(rule.id, v)} label={`${player.name}: ${rule.name}`} />
+              <Stepper value={n} onChange={(v) => onCount(rule.id, v)} label={`${player.name}: ${rule.name}`} disabled={readOnly} />
             )}
           </td>
         );
@@ -340,27 +399,47 @@ function TickBox({
   onChange,
   label,
   tone = "primary",
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label: string;
   tone?: "primary" | "ink";
+  disabled?: boolean;
 }) {
   return (
-    <label className="inline-flex size-11 cursor-pointer items-center justify-center">
+    <label className={cn("inline-flex size-11 items-center justify-center", !disabled && "cursor-pointer")}>
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={label}
-        className={cn("size-5 cursor-pointer", tone === "ink" ? "accent-ink" : "accent-primary")}
+        className={cn("size-5 cursor-pointer disabled:cursor-default", tone === "ink" ? "accent-ink" : "accent-primary")}
       />
     </label>
   );
 }
 
 /** Number input with − / + for counts (big enough to tap on a phone). */
-function Stepper({ value, onChange, label }: { value: number; onChange: (value: number) => void; label: string }) {
+function Stepper({
+  value,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return (
+      <span aria-label={label} className={cn("text-base font-semibold tabular-nums", value > 0 ? "text-primary" : "text-muted-foreground")}>
+        {value}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center">
       <button

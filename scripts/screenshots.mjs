@@ -8,7 +8,7 @@ const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const OUT_DIR = process.env.OUT_DIR ?? "screenshots";
 const PAGES = [
   "/login", "/", "/team", "/league", "/league/u3", "/rules", "/admin",
-  "/admin/players", "/admin/players/import", "/admin/rules", "/admin/gameweeks", "/admin/results", "/admin/users",
+  "/admin/players", "/admin/players/import", "/admin/rules", "/admin/gameweeks", "/results", "/admin/users",
 ];
 
 await mkdir(OUT_DIR, { recursive: true });

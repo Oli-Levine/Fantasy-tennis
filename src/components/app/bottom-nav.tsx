@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Home, Shield, Trophy, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardList, Home, Shield, Trophy, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -15,14 +15,17 @@ const ITEMS: NavItem[] = [
 ];
 
 const ADMIN_ITEM: NavItem = { href: "/admin", label: "Admin", icon: Shield };
+const RESULTS_ITEM: NavItem = { href: "/results", label: "Results", icon: ClipboardList };
 
 function isActive(pathname: string, href: string) {
+  if (href === "/admin" && pathname === "/results") return true; // admins reach Results from the Admin hub
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function BottomNav({ showAdmin = false }: { showAdmin?: boolean }) {
+/** Admins get Admin (Results lives inside it); team captains get Results. */
+export function BottomNav({ showAdmin = false, showResults = false }: { showAdmin?: boolean; showResults?: boolean }) {
   const pathname = usePathname();
-  const items = showAdmin ? [...ITEMS, ADMIN_ITEM] : ITEMS;
+  const items = showAdmin ? [...ITEMS, ADMIN_ITEM] : showResults ? [...ITEMS, RESULTS_ITEM] : ITEMS;
 
   return (
     <nav

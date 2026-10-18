@@ -20,7 +20,8 @@ export function describeDbError(error: DbError, what = "That"): string {
     case "22023":
       return error.message && !error.message.includes("violates") ? error.message : `${what} has an invalid value.`;
     case "42501":
-      return "Only admins can do that.";
+      // Our own explanations (e.g. "Only team captains and admins…"); RLS messages stay generic.
+      return error.message && /^(Only|Gameweek) /.test(error.message) ? error.message : "Only admins can do that.";
     case "PGRST202":
       return "The database is missing an update. Re-run the latest file in supabase/migrations in the Supabase SQL Editor.";
     default:

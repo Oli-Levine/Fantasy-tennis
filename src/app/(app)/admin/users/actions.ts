@@ -12,7 +12,12 @@ export async function setRole(userId: string, role: Role): Promise<ActionResult>
   const { error } = await supabase.rpc("set_user_role", { p_user_id: userId, p_role: role });
   if (error) return fail(describeDbError(error));
   revalidatePath("/", "layout");
-  return ok(undefined, role === "admin" ? "Promoted to admin" : "Admin rights removed");
+  const messages: Record<Role, string> = {
+    admin: "Promoted to admin",
+    captain: "Now a team captain (can enter results)",
+    user: "Back to a regular player",
+  };
+  return ok(undefined, messages[role]);
 }
 
 export async function removeUser(userId: string): Promise<ActionResult> {

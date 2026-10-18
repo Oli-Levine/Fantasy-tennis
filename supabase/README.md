@@ -15,6 +15,7 @@ All database changes live here as plain SQL files. Run them in
 | 6 | `migrations/0006_results.sql` | Results entry, publishing and points |
 | 7 | `migrations/0007_reset_and_delete.sql` | Restart the season; delete players safely |
 | 8 | `migrations/0008_playing_and_club_limit.sql` | Non-playing accounts; max players per club team |
+| 9 | `migrations/0009_team_captains.sql` | Team captain role (enters results, can't publish); per-player results saves |
 | 9 | `admin/make_me_admin.sql` | Makes you the first admin (edit the email first) |
 | 10 | `seed/seed_test_data.sql` | Optional: 40 fake players, 10 fake managers, sample rules |
 

@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // Results entry moved out of /admin so team captains can use it too.
+  async redirects() {
+    return [{ source: "/admin/results", destination: "/results", permanent: false }];
+  },
 };
 
 export default nextConfig;

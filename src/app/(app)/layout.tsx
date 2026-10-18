@@ -3,7 +3,7 @@ import { TopBar } from "@/components/app/top-bar";
 import { requireMember } from "@/lib/auth";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
-  const { user, profile, isAdmin } = await requireMember();
+  const { user, profile, isAdmin, canEnterResults } = await requireMember();
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       >
         {children}
       </main>
-      <BottomNav showAdmin={isAdmin} />
+      <BottomNav showAdmin={isAdmin} showResults={canEnterResults} />
     </div>
   );
 }
