@@ -15,7 +15,7 @@ export default async function JoinPage() {
 
   return (
     <main
-      className="mx-auto flex min-h-dvh max-w-content flex-col px-gutter"
+      className="on-dark mx-auto flex min-h-dvh max-w-content flex-col px-gutter"
       style={{ paddingTop: "calc(env(safe-area-inset-top) + 2rem)", paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
     >
       <div className="flex items-center justify-between">
