@@ -103,7 +103,7 @@ The visual reference for the player card grid and the stats header bar is a scre
 Stats page, mini-leagues, notifications, automatic price changes.
 
 ## 10. Phases
-1. Project setup, Supabase connection, Google auth with the uni-domain restriction, theme tokens, nav shell, first Vercel deploy.
+1. Project setup, Supabase connection, Google auth (the uni-domain restriction was replaced by the club join code, see section 2), theme tokens, nav shell, first Vercel deploy.
 2. Database schema, RLS policies, and a seed script with 40 fake players, 10 fake managers and sample scoring rules.
 3. Admin pages for players (CSV import and photos), scoring rules and gameweeks.
 4. Team page with squad picking, budget, captain/vice-captain and the deadline lock.
@@ -120,7 +120,7 @@ The owner is building and deploying a website for the first time, so explain eac
 - **GitHub:** repo is `https://github.com/Oli-Levine/Fantasy-tennis`. Work on and push straight to `main` (agreed with the owner: Vercel deploys `main`, and there's no merge step to manage on an iPad).
 - **Vercel:** ✅ imported and deploying `main` automatically, with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` set.
 - **Google sign-in:** ✅ set up in Google Cloud and Supabase, and working.
-- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `0007_reset_and_delete.sql` `0008_playing_and_club_limit.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql` (fake data still loaded). Every new migration needs the same instructions in the phase summary.
+- **Supabase:** ✅ project live. It's **not reachable from cloud sessions**, so the owner runs SQL by hand: give them the file path and tell them to open it on GitHub → **Copy raw file** → Supabase **SQL Editor → New query** → paste → **Run** (and "Run this query" if warned about destructive operations). Already run: `0001_schema.sql` … `0004_squads.sql` `0005_transfers_chips.sql`, `0006_results.sql`, `0007_reset_and_delete.sql` `0008_playing_and_club_limit.sql`, `admin/make_me_admin.sql` (the owner is admin) and `seed/seed_test_data.sql`. Before launch the owner planned to press **Admin → Delete test data** and **Admin → Restart season**; ask whether that's been done before assuming fake data is present. `admin/check_points.sql` is a read-only diagnostic (stored vs expected gameweek points per manager) the owner can run in the SQL Editor. Every new migration needs the same instructions in the phase summary.
 - **Keys:** the project URL and anon key live only in Vercel (and an uncommitted `.env.local`). They must never be written into this file or committed. Tests, builds and screenshots don't need them. No service-role key is in use; if one is ever needed, ask the owner to add it in Vercel themselves.
 - **GitHub Secrets:** `SUPABASE_DB_URL` (session pooler URI with password), `SUPABASE_URL`, `SUPABASE_ANON_KEY` — used only by `.github/workflows/supabase-keepalive-backup.yml` (daily keepalive query + `pg_dump` of the `public`/`private` schemas uploaded as a 30-day artifact; dumps are gitignored and never committed). The repo is **public** (owner's choice), so artifacts are downloadable by any GitHub user: never add the `auth` schema (sessions/refresh tokens) to the dump. See `supabase/README.md`.
 
@@ -180,4 +180,30 @@ The owner is building and deploying a website for the first time, so explain eac
   - **Not playing:** `profiles.is_playing` (default true). Admins toggle it per user in Admin → Users (`public.admin_set_playing`); the owner (organiser) uses it on their own account. Non-playing accounts keep full access, are left out of `loadLeague()` and never get a locked team (`lock_due_gameweeks` filters them). Home shows a note.
   - **Club-team limit:** `club_settings.max_per_club_team` (default 2). `save_squad` refuses squads with more than that from one club team when players change; the UI mirrors it (`ClubLimit`, `addBlocker` "Already 2 from the 1s", `squadProblems`, `autoPick`). Rules page shows it. Most DB tests set the limit to 5 in `beforeAll`; the limit has its own tests. `0003` now drops/recreates `admin_list_users` so it stays re-runnable after 0008 changed its columns.
 
-**All 7 phases are built.** Out of scope for now (section 9): stats page, mini-leagues, notifications, automatic price changes. Raw `rule_results` are kept for the future stats page.
+- Backups (`.github/workflows/supabase-keepalive-backup.yml`, see section 11 and `supabase/README.md`): daily 03:17 UTC + manual "Run workflow". Keepalive job = `psql` read + `/auth/v1/health` ping; backup job = `pg_dump` (custom + gzipped SQL) of `public` + `private` only, 30-day artifact. Verified green on 18 Oct 2026 (run #3). The pooler connection string must use the database password (letters/numbers only); a wrong password shows as `password authentication failed for user "postgres"`.
+
+### Current state (18 Oct 2026)
+- **All 7 phases are built and tested by the owner, plus the tweaks above.** The app is about to launch to the club; the first real deadline is **Tue 20 Oct 2026, 21:00**.
+- The owner's account (admin) is set to **not playing**, so it's hidden from the league.
+- Out of scope until the owner asks (section 9): stats page, mini-leagues, notifications, automatic price changes. Raw `rule_results` are kept for the future stats page. The owner said they may want **aesthetic changes** next (colours/fonts/cards); theme tokens live in `src/app/globals.css`.
+
+### Owner decisions (don't re-litigate)
+- The GitHub repo stays **public**. Consequently backup artifacts are downloadable by any GitHub user: never add the `auth` schema (sessions, refresh tokens) or other credentials to the dump.
+- The owner considers the data low-sensitivity and accepted the **join code having no attempt limit** (brute-forceable). Don't add friction around it unless asked.
+- Work straight on `main` (no PRs); Vercel deploys every push.
+
+### Known issues from the 18 Oct 2026 review (not fixed; owner chose to leave them for now)
+Raise these only if relevant to a requested change, or fix them when touching the same code:
+- **Medium:** `admin_delete_player`, `private.delete_test_data` and `admin_set_playing` change squads without calling `private.lock_due_gameweeks()` first. If run after a deadline but before anyone triggers the lock, affected managers can miss that week's snapshot. Fix: `perform private.lock_due_gameweeks();` at the start of each.
+- **Medium:** Admin → Gameweeks lets an admin set a status by hand. Setting "locked" before the deadline skips the snapshot entirely (the lock only processes `open` weeks); setting "published" before the deadline scores empty teams. Fix: forbid locking/publishing before the deadline, and re-opening once entries exist.
+- **Medium (cleanup):** `private.lock_due_gameweeks()` and `public.save_squad()` are copied whole into `0004` → `0005` → `0008`; only the **latest file's version is live**. Change them by copying the `0008` version into a new migration.
+- **Low:** default Supabase grants leave `authenticated` with `TRUNCATE/TRIGGER/REFERENCES` on public tables (not reachable via the API; revoke for hygiene). No security headers (`X-Frame-Options`/CSP `frame-ancestors`, `Referrer-Policy`) in `next.config.ts`.
+- **Low:** a save in the last milliseconds before a deadline can miss that week's snapshot (no lock between save and snapshot). Changing a rule from `count` to `tick` keeps old counts > 1. Un-publishing a week leaves `gameweek_entries.points` readable (league ignores it). 1000-row reads without paging: `loadTeamData` (`player_gameweeks`) and `recalculate.ts` (picks/results per gameweek).
+- **Low (cleanup):** score-breakdown loading is duplicated in `league/[userId]/page.tsx` and `src/lib/last-score.ts`; club-team filter chips duplicated in `player-pool.tsx` and `results-grid.tsx`; pre-migration fallbacks (`max_per_club_team ?? 2`, `is_playing === false`, "missing update" branches) and the unused `soon` flag on the Admin hub can go; demo fixtures are slightly inconsistent (dev screenshots only).
+- Verified fine in that review: RLS on all 12 tables; no direct writes to squads/chips/snapshots; every server action and admin RPC checks permissions server-side (role read from the DB); deadlines enforced in the DB in Europe/London; no secrets anywhere in git history; `npm audit` clean.
+
+### Tips for the next session (cloud container)
+- Run `npm ci` first if `node_modules` is missing. Checks: `npm run lint`, `npm run typecheck`, `npm test` (unit + PGlite DB tests), `npm run build`.
+- Dev server for screenshots: `DEV_SKIP_AUTH=1 npm run dev` (in the background), then `BASE_URL=http://localhost:3000 CHROMIUM_PATH=/opt/pw-browsers/chromium npm run screenshots`. For ad-hoc Playwright scripts outside the repo, import from `/home/user/Fantasy-tennis/node_modules/@playwright/test/index.mjs`. Stop the server with `fuser -k 3000/tcp`. **Don't** use `pkill -f "next dev"`: it matches and kills the calling shell.
+- GitHub Actions logs/artifacts are readable with the GitHub MCP tools (`actions_list`, `get_job_logs`), and `actions_run_trigger` can start the backup workflow. `actionlint` (download the release binary) validates workflow edits.
+- The owner can't run SQL from the session: every new migration needs the click-by-click Supabase steps (section 11) in the reply, and the app should be pushed only once it works with and without the migration where possible (or warn "run the SQL first").

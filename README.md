@@ -26,7 +26,7 @@ npm run dev          # local dev server (DEV_SKIP_AUTH=1 skips sign-in locally)
 npm run build        # production build
 npm run lint         # ESLint
 npm run typecheck    # TypeScript
-npm test             # Vitest unit tests
+npm test             # Vitest unit tests + database/RLS tests (PGlite)
 npm run screenshots  # 375px phone screenshots of every screen (needs a running server)
 ```
 
@@ -39,4 +39,7 @@ npm run screenshots  # 375px phone screenshots of every screen (needs a running 
 - `src/components/ui` — shadcn/ui primitives; `src/components/app` — app components
 - `src/lib` — Supabase clients, database types, auth helpers, UK-time deadline helpers, formatting
 - `src/app/join` — onboarding: club join code, then team name
-- `supabase/` — SQL migrations, seed/cleanup scripts and database tests (see `supabase/README.md`)
+- `src/app/(app)/account` — edit team name and display name
+- `src/lib/scoring.ts` — the scoring engine (pure, unit-tested); `src/lib/league.ts` — standings
+- `supabase/` — SQL migrations, seed/cleanup scripts, admin scripts and database tests (see `supabase/README.md`)
+- `.github/workflows/supabase-keepalive-backup.yml` — daily Supabase keepalive + `pg_dump` backup artifact
