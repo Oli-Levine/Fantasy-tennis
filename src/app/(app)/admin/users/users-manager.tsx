@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, Shield, ShieldOff, UserX } from "lucide-react";
+import { MoreVertical, Shield, ShieldOff, UserCheck, UserMinus, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
 import type { Database } from "@/lib/database.types";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { removeUser, setRole } from "./actions";
+import { removeUser, setPlaying, setRole } from "./actions";
 
 type AdminUser = Database["public"]["Functions"]["admin_list_users"]["Returns"][number];
 
@@ -31,6 +31,45 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
       router.refresh();
     });
   }
+
+  function togglePlaying(user: AdminUser) {
+    startTransition(async () => {
+      const result = await setPlaying(user.id, !user.is_playing);
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(`${user.display_name}: ${result.message}`);
+      router.refresh();
+    });
+  }
+
+  const menu = (user: AdminUser, openRemove?: () => void) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${user.display_name}`} disabled={pending}>
+          <MoreVertical />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {user.joined_at && (
+          <DropdownMenuItem onSelect={() => togglePlaying(user)}>
+            {user.is_playing ? <UserMinus /> : <UserCheck />}
+            {user.is_playing ? "Not playing (hide from league)" : "Playing (show in league)"}
+          </DropdownMenuItem>
+        )}
+        {user.joined_at && openRemove && (
+          <DropdownMenuItem onSelect={() => changeRole(user)}>
+            {user.role === "admin" ? <ShieldOff /> : <Shield />}
+            {user.role === "admin" ? "Remove admin" : "Make admin"}
+          </DropdownMenuItem>
+        )}
+        {openRemove && (
+          <DropdownMenuItem variant="destructive" onSelect={openRemove}>
+            <UserX />
+            Remove user
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
     <ul className="overflow-hidden rounded-panel bg-card shadow-soft">
@@ -59,6 +98,7 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
                 {user.role === "admin" && <Tag tone="gold">Admin</Tag>}
                 {!user.joined_at && <Tag tone="danger">Not joined</Tag>}
                 {user.is_test_data && <Tag>Test</Tag>}
+                {user.joined_at && !user.is_playing && <Tag>Not playing</Tag>}
               </span>
             </span>
             {!isMe && (
@@ -78,29 +118,10 @@ export function UsersManager({ users, currentUserId }: { users: AdminUser[]; cur
                   toast.success(`${user.display_name} removed`);
                   router.refresh();
                 }}
-                trigger={(openRemove) => (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${user.display_name}`} disabled={pending}>
-                        <MoreVertical />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {user.joined_at && (
-                        <DropdownMenuItem onSelect={() => changeRole(user)}>
-                          {user.role === "admin" ? <ShieldOff /> : <Shield />}
-                          {user.role === "admin" ? "Remove admin" : "Make admin"}
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem variant="destructive" onSelect={openRemove}>
-                        <UserX />
-                        Remove user
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                trigger={(openRemove) => menu(user, openRemove)}
               />
             )}
+            {isMe && user.joined_at && menu(user)}
           </li>
         );
       })}

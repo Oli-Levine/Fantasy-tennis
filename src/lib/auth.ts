@@ -33,6 +33,7 @@ const DEV_VIEWER: Viewer = {
     role: "admin",
     joined_at: "2026-01-01T00:00:00Z",
     is_test_data: false,
+    is_playing: true,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },

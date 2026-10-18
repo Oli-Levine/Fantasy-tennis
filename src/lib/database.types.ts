@@ -26,6 +26,7 @@ export type ClubSettings = {
   budget: number;
   free_transfers_per_gameweek: number;
   transfer_hit_points: number;
+  max_per_club_team: number;
   updated_at: Timestamp;
 };
 
@@ -36,6 +37,8 @@ export type Profile = {
   role: Role;
   joined_at: Timestamp | null;
   is_test_data: boolean;
+  /** False = has access but isn't in the league (e.g. the organiser). */
+  is_playing: boolean;
   created_at: Timestamp;
   updated_at: Timestamp;
 };
@@ -198,6 +201,7 @@ export type Database = {
       get_transfer_state: { Args: never; Returns: TransferState };
       play_chip: { Args: { p_chip: Chip }; Returns: { chip: Chip; gameweek_id: number } };
       cancel_chip: { Args: { p_chip: Chip }; Returns: undefined };
+      admin_set_playing: { Args: { p_user_id: Uuid; p_playing: boolean }; Returns: undefined };
       admin_reset_season: {
         Args: { p_clear_squads: boolean };
         Returns: { entries: number; gameweeks: number; squads: number };
@@ -235,6 +239,7 @@ export type Database = {
           created_at: Timestamp;
           last_sign_in_at: Timestamp | null;
           is_test_data: boolean;
+          is_playing: boolean;
         }[];
       };
       admin_test_data_counts: {

@@ -105,7 +105,9 @@ $$;
 -- -----------------------------------------------------------------------------
 -- Admin: list everyone who has signed in, with their email
 -- -----------------------------------------------------------------------------
-create or replace function public.admin_list_users()
+-- Dropped first so this file can be re-run after 0008 changed the columns.
+drop function if exists public.admin_list_users();
+create function public.admin_list_users()
 returns table (
   id uuid,
   email text,

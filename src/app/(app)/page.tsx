@@ -65,6 +65,13 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-4">
+      {profile.is_playing === false && (
+        <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+          <strong className="text-foreground">You&apos;re not playing this season.</strong> You can still pick a team to
+          try things out, but it won&apos;t be locked in at deadlines and you won&apos;t appear in the league. Change this
+          in Admin → Users.
+        </p>
+      )}
       {activeChip && (
         <Link
           href="/team"

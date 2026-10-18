@@ -11,6 +11,7 @@ import {
   setCaptain,
   setViceCaptain,
   squadCost,
+  overClubLimit,
   squadProblems,
   swapSlots,
   toPicks,
@@ -20,13 +21,13 @@ import {
 } from "./squad";
 
 const pool: PoolPlayer[] = [
-  { id: "a", name: "A", price: 12.5, is_active: true },
-  { id: "b", name: "B", price: 9, is_active: true },
-  { id: "c", name: "C", price: 7, is_active: true },
-  { id: "d", name: "D", price: 4, is_active: true },
-  { id: "e", name: "E", price: 3, is_active: true },
-  { id: "f", name: "F", price: 3, is_active: false },
-  { id: "g", name: "G", price: 11, is_active: true },
+  { id: "a", name: "A", price: 12.5, is_active: true, club_team: 1 },
+  { id: "b", name: "B", price: 9, is_active: true, club_team: 2 },
+  { id: "c", name: "C", price: 7, is_active: true, club_team: 3 },
+  { id: "d", name: "D", price: 4, is_active: true, club_team: 4 },
+  { id: "e", name: "E", price: 3, is_active: true, club_team: 5 },
+  { id: "f", name: "F", price: 3, is_active: false, club_team: 6 },
+  { id: "g", name: "G", price: 11, is_active: true, club_team: 1 },
 ];
 const price = (id: string) => pool.find((p) => p.id === id)!.price;
 const build = (...ids: string[]) => ids.reduce<Squad>((s, id) => addPlayer(s, id), emptySquad());
@@ -169,5 +170,39 @@ describe("transfers", () => {
     expect(transferSummary(build("g", "f", "c", "d", "e"), { ...rules, unlimited: true })).toMatchObject({
       made: 2, hit: 0, freeLeft: null,
     });
+  });
+});
+
+describe("club team limit", () => {
+  const club = new Map([
+    ["a", 1], ["g", 1], ["h", 1], ["b", 2], ["c", 3], ["d", 4], ["e", 5],
+  ]);
+  const limit = { max: 2, clubOf: (id: string) => club.get(id) };
+  const h = { id: "h", name: "H", price: 2, is_active: true, club_team: 1 };
+
+  it("greys out a third player from the same club team", () => {
+    expect(addBlocker(h, build("a", "g"), 20, limit)).toBe("Already 2 from the 1s");
+    expect(addBlocker(h, build("a", "b"), 20, limit)).toBeNull();
+  });
+
+  it("flags a squad that's over the limit", () => {
+    const s = build("a", "g", "h", "b", "c");
+    expect(overClubLimit(s, limit)).toBe(1);
+    expect(squadProblems(s, 30, 35, limit)).toContain("Max 2 players from the 1s.");
+    expect(overClubLimit(build("a", "g", "b", "c", "d"), limit)).toBeNull();
+  });
+
+  it("auto-pick never takes more than the limit from one club team", () => {
+    const pool2: PoolPlayer[] = [
+      ...["p1", "p2", "p3", "p4"].map((id) => ({ id, name: id, price: 1, is_active: true, club_team: 1 })),
+      ...["q1", "q2", "q3"].map((id) => ({ id, name: id, price: 5, is_active: true, club_team: 2 })),
+    ];
+    for (let seed = 0; seed < 20; seed++) {
+      let x = seed + 1;
+      const random = () => ((x = (x * 9301 + 49297) % 233280) / 233280);
+      const s = autoPick(emptySquad(), pool2, 35, random, 2);
+      const fromOnes = playerIds(s).filter((id) => id.startsWith("p")).length;
+      expect(fromOnes).toBeLessThanOrEqual(2);
+    }
   });
 });

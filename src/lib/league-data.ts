@@ -21,7 +21,8 @@ export async function loadLeague(): Promise<LeagueData> {
       .from("profiles")
       .select("id, team_name, display_name")
       .not("joined_at", "is", null)
-      .not("team_name", "is", null),
+      .not("team_name", "is", null)
+      .eq("is_playing", true),
   ]);
   const failed = [gameweeks, profiles].find((r) => r.error);
   if (failed?.error) throw new Error(`Couldn't load the league: ${failed.error.message}`);

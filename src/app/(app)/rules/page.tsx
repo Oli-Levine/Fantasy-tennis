@@ -13,14 +13,14 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Rules" };
 
-type Settings = { budget: number; freeTransfers: number; hitPoints: number };
+type Settings = { budget: number; freeTransfers: number; hitPoints: number; maxPerClubTeam: number };
 
 export default async function RulesPage() {
   await requireMember();
   const { rules, settings } = devAuthBypass()
-    ? { rules: DEMO_RULES.filter((r) => !r.archived_at), settings: { budget: 35, freeTransfers: 1, hitPoints: 5 } }
+    ? { rules: DEMO_RULES.filter((r) => !r.archived_at), settings: { budget: 35, freeTransfers: 1, hitPoints: 5, maxPerClubTeam: 2 } }
     : await loadRules();
-  const { budget, freeTransfers, hitPoints } = settings;
+  const { budget, freeTransfers, hitPoints, maxPerClubTeam } = settings;
 
   return (
     <div className="space-y-4">
@@ -30,6 +30,10 @@ export default async function RulesPage() {
         <ul>
           <li>Pick <strong>5 club players</strong>: 4 starters and 1 on the bench.</li>
           <li>The whole squad must cost <strong>{formatPrice(budget)}</strong> or less, at current prices.</li>
+          <li>
+            No more than <strong>{maxPerClubTeam} players from any one club team</strong> (e.g. at most{" "}
+            {maxPerClubTeam} from the 1s).
+          </li>
           <li>Any player can be in lots of managers&apos; teams.</li>
         </ul>
       </Section>
@@ -181,7 +185,7 @@ async function loadRules(): Promise<{ rules: ScoringRule[]; settings: Settings }
   const supabase = await createClient();
   const [rules, settings] = await Promise.all([
     supabase.from("scoring_rules").select("*").is("archived_at", null).order("sort_order").order("name"),
-    supabase.from("club_settings").select("budget, free_transfers_per_gameweek, transfer_hit_points").single(),
+    supabase.from("club_settings").select("budget, free_transfers_per_gameweek, transfer_hit_points, max_per_club_team").single(),
   ]);
   if (rules.error) throw new Error(`Couldn't load the scoring rules: ${rules.error.message}`);
   if (settings.error) throw new Error(`Couldn't load the club settings: ${settings.error.message}`);
@@ -191,6 +195,7 @@ async function loadRules(): Promise<{ rules: ScoringRule[]; settings: Settings }
       budget: Number(settings.data.budget),
       freeTransfers: settings.data.free_transfers_per_gameweek,
       hitPoints: settings.data.transfer_hit_points,
+      maxPerClubTeam: settings.data.max_per_club_team ?? 2,
     },
   };
 }

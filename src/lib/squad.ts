@@ -12,7 +12,26 @@ export const BENCH_INDEX = 4;
 export type Slot = { playerId: string; isCaptain: boolean; isViceCaptain: boolean } | null;
 export type Squad = Slot[];
 
-export type PoolPlayer = { id: string; name: string; price: number; is_active: boolean };
+export type PoolPlayer = { id: string; name: string; price: number; is_active: boolean; club_team: number };
+
+/** At most `max` players from any one club team (1s–6s). */
+export type ClubLimit = { max: number; clubOf: (playerId: string) => number | undefined };
+
+/** How many squad players come from `club`. */
+export function countFromClub(squad: Squad, club: number, limit: ClubLimit): number {
+  return playerIds(squad).filter((id) => limit.clubOf(id) === club).length;
+}
+
+/** The first club team the squad has too many players from (null if none). */
+export function overClubLimit(squad: Squad, limit: ClubLimit): number | null {
+  const counts = new Map<number, number>();
+  for (const id of playerIds(squad)) {
+    const club = limit.clubOf(id);
+    if (club != null) counts.set(club, (counts.get(club) ?? 0) + 1);
+  }
+  const over = [...counts.entries()].filter(([, n]) => n > limit.max).map(([club]) => club).sort();
+  return over[0] ?? null;
+}
 
 export type SavedPick = { position: number; player_id: string; is_captain: boolean; is_vice_captain: boolean };
 
@@ -134,11 +153,13 @@ export function setViceCaptain(squad: Squad, playerId: string): Squad {
 }
 
 /** Problems that stop the squad being saved (empty = ready). */
-export function squadProblems(squad: Squad, cost: number, budget: number): string[] {
+export function squadProblems(squad: Squad, cost: number, budget: number, limit?: ClubLimit): string[] {
   const problems: string[] = [];
   const missing = squad.filter((s) => !s).length;
   if (missing) problems.push(`Pick ${missing} more player${missing === 1 ? "" : "s"}.`);
   if (cost > budget) problems.push(`£${(cost - budget).toFixed(1)}m over budget.`);
+  const club = limit ? overClubLimit(squad, limit) : null;
+  if (club != null) problems.push(`Max ${limit!.max} players from the ${club}s.`);
   const starters = squad.slice(0, STARTER_COUNT);
   if (!missing && !starters.some((s) => s?.isCaptain)) problems.push("Choose a captain.");
   if (!missing && !starters.some((s) => s?.isViceCaptain)) problems.push("Choose a vice-captain.");
@@ -146,10 +167,13 @@ export function squadProblems(squad: Squad, cost: number, budget: number): strin
 }
 
 /** Why a player can't be added right now (null = they can). */
-export function addBlocker(player: PoolPlayer, squad: Squad, budgetLeft: number): string | null {
+export function addBlocker(player: PoolPlayer, squad: Squad, budgetLeft: number, limit?: ClubLimit): string | null {
   if (indexOf(squad, player.id) >= 0) return "In your squad";
   if (!player.is_active) return "Unavailable";
   if (isFull(squad)) return "Squad full";
+  if (limit && countFromClub(squad, player.club_team, limit) >= limit.max) {
+    return `Already ${limit.max} from the ${player.club_team}s`;
+  }
   if (round1(player.price - budgetLeft) > 0) return `£${round1(player.price - budgetLeft).toFixed(1)}m over budget`;
   return null;
 }
@@ -158,8 +182,16 @@ export function addBlocker(player: PoolPlayer, squad: Squad, budgetLeft: number)
  * Fills the empty slots with random available players while staying within
  * budget (it always leaves enough money for the cheapest options).
  */
-export function autoPick(squad: Squad, pool: PoolPlayer[], budget: number, random: () => number = Math.random): Squad {
+export function autoPick(
+  squad: Squad,
+  pool: PoolPlayer[],
+  budget: number,
+  random: () => number = Math.random,
+  maxPerClubTeam = Infinity,
+): Squad {
   const priceOf = new Map(pool.map((p) => [p.id, p.price]));
+  const clubOf = new Map(pool.map((p) => [p.id, p.club_team]));
+  const fromClub = (s: Squad, club: number) => playerIds(s).filter((id) => clubOf.get(id) === club).length;
   let next = squad;
   let left = round1(budget - squadCost(squad, (id) => priceOf.get(id) ?? 0));
   const candidates = shuffle(
@@ -169,7 +201,8 @@ export function autoPick(squad: Squad, pool: PoolPlayer[], budget: number, rando
 
   while (!isFull(next)) {
     const slotsAfterThis = next.filter((s) => !s).length - 1;
-    const remaining = candidates.filter((p) => indexOf(next, p.id) < 0);
+    const current = next;
+    const remaining = candidates.filter((p) => indexOf(current, p.id) < 0 && fromClub(current, p.club_team) < maxPerClubTeam);
     const pick = remaining.find((p) => {
       const others = remaining.filter((o) => o.id !== p.id).map((o) => o.price).sort((x, y) => x - y);
       const cheapestRest = others.slice(0, slotsAfterThis).reduce((a, b) => a + b, 0);

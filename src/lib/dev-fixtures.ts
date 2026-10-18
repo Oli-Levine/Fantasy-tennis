@@ -58,10 +58,10 @@ export const DEMO_GAMEWEEKS: Gameweek[] = [
 }));
 
 export const DEMO_USERS: Database["public"]["Functions"]["admin_list_users"]["Returns"] = [
-  { id: "dev-user", email: "dev@example.com", display_name: "Dev Player", team_name: "Deuce Bigalow", role: "admin", joined_at: now, created_at: now, last_sign_in_at: now, is_test_data: false },
-  { id: "u2", email: "sam@example.com", display_name: "Sam Carter", team_name: null, role: "user", joined_at: null, created_at: now, last_sign_in_at: now, is_test_data: false },
-  { id: "u3", email: "priya@example.com", display_name: "Priya Shah", team_name: "Net Gains", role: "user", joined_at: now, created_at: now, last_sign_in_at: now, is_test_data: false },
-  { id: "u4", email: "test-manager-01@example.invalid", display_name: "Alex Fern", team_name: "Grand Slammers", role: "user", joined_at: now, created_at: now, last_sign_in_at: null, is_test_data: true },
+  { id: "dev-user", email: "dev@example.com", display_name: "Dev Player", team_name: "Deuce Bigalow", role: "admin", joined_at: now, created_at: now, last_sign_in_at: now, is_test_data: false, is_playing: true },
+  { id: "u2", email: "sam@example.com", display_name: "Sam Carter", team_name: null, role: "user", joined_at: null, created_at: now, last_sign_in_at: now, is_test_data: false, is_playing: true },
+  { id: "u3", email: "priya@example.com", display_name: "Priya Shah", team_name: "Net Gains", role: "user", joined_at: now, created_at: now, last_sign_in_at: now, is_test_data: false, is_playing: true },
+  { id: "u4", email: "test-manager-01@example.invalid", display_name: "Alex Fern", team_name: "Grand Slammers", role: "user", joined_at: now, created_at: now, last_sign_in_at: null, is_test_data: true, is_playing: true },
 ];
 
 /** Demo squad for the dev user: 4 starters + bench, captain and vice-captain. */

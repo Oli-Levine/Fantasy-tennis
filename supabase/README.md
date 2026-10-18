@@ -14,8 +14,9 @@ All database changes live here as plain SQL files. Run them in
 | 5 | `migrations/0005_transfers_chips.sql` | Transfers, points hits and chips |
 | 6 | `migrations/0006_results.sql` | Results entry, publishing and points |
 | 7 | `migrations/0007_reset_and_delete.sql` | Restart the season; delete players safely |
-| 8 | `admin/make_me_admin.sql` | Makes you the first admin (edit the email first) |
-| 9 | `seed/seed_test_data.sql` | Optional: 40 fake players, 10 fake managers, sample rules |
+| 8 | `migrations/0008_playing_and_club_limit.sql` | Non-playing accounts; max players per club team |
+| 9 | `admin/make_me_admin.sql` | Makes you the first admin (edit the email first) |
+| 10 | `seed/seed_test_data.sql` | Optional: 40 fake players, 10 fake managers, sample rules |
 
 Migrations are safe to run again. Later phases add `0005_…`, `0006_…`; run each new one once, in order.
 

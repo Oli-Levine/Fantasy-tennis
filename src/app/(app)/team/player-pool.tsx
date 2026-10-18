@@ -8,7 +8,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import type { Player } from "@/lib/database.types";
 import { formatPrice } from "@/lib/format";
 import { CLUB_TEAMS, clubTeamLabel, playerPhotoUrl } from "@/lib/players";
-import { addBlocker, indexOf, type Squad } from "@/lib/squad";
+import { addBlocker, indexOf, type ClubLimit, type Squad } from "@/lib/squad";
 import type { PlayerStats } from "@/lib/team-data";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,7 @@ export function PlayerPool({
   players,
   squad,
   budgetLeft,
+  clubLimit,
   stats,
   onAdd,
   onRemove,
@@ -27,6 +28,7 @@ export function PlayerPool({
   players: Player[];
   squad: Squad;
   budgetLeft: number;
+  clubLimit: ClubLimit;
   stats: Record<string, PlayerStats>;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
@@ -101,7 +103,7 @@ export function PlayerPool({
         <ul className="overflow-hidden rounded-panel bg-card shadow-soft">
           {visible.map((p) => {
             const inSquad = indexOf(squad, p.id) >= 0;
-            const blocker = inSquad ? null : addBlocker(p, squad, budgetLeft);
+            const blocker = inSquad ? null : addBlocker(p, squad, budgetLeft, clubLimit);
             const s = stats[p.id];
             return (
               <li

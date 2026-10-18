@@ -28,6 +28,7 @@ import {
   swapSlots,
   toPicks,
   transferSummary,
+  type ClubLimit,
   type Squad,
   type TransferRules,
   type TransferSummary,
@@ -46,6 +47,7 @@ export function TeamBuilder({
   players,
   picks,
   budget,
+  maxPerClubTeam,
   nextGameweek,
   baselineIds,
   freeTransfers,
@@ -66,7 +68,8 @@ export function TeamBuilder({
   const priceOf = (id: string) => byId.get(id)?.price ?? 0;
   const cost = squadCost(squad, priceOf);
   const left = round1(budget - cost);
-  const problems = squadProblems(squad, cost, budget);
+  const clubLimit: ClubLimit = { max: maxPerClubTeam, clubOf: (id) => byId.get(id)?.club_team };
+  const problems = squadProblems(squad, cost, budget, clubLimit);
   const dirty = JSON.stringify(toPicks(squad)) !== JSON.stringify(toPicks(saved));
   const count = playerIds(squad).length;
 
@@ -138,7 +141,7 @@ export function TeamBuilder({
                 variant="soft"
                 size="sm"
                 disabled={count === 5}
-                onClick={() => setSquad((s) => autoPick(s, players, budget))}
+                onClick={() => setSquad((s) => autoPick(s, players, budget, Math.random, maxPerClubTeam))}
               >
                 <Shuffle />
                 Auto-pick
@@ -212,6 +215,7 @@ export function TeamBuilder({
         players={players}
         squad={squad}
         budgetLeft={left}
+        clubLimit={clubLimit}
         stats={stats}
         onAdd={(id) => setSquad((s) => addPlayer(s, id))}
         onRemove={(id) => setSquad((s) => removePlayer(s, id))}

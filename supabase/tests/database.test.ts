@@ -20,6 +20,7 @@ const SQUADS = sqlFile("migrations/0004_squads.sql");
 const TRANSFERS = sqlFile("migrations/0005_transfers_chips.sql");
 const RESULTS = sqlFile("migrations/0006_results.sql");
 const RESET = sqlFile("migrations/0007_reset_and_delete.sql");
+const PLAYING = sqlFile("migrations/0008_playing_and_club_limit.sql");
 const SEED = sqlFile("seed/seed_test_data.sql");
 const DELETE_TEST_DATA = sqlFile("seed/delete_test_data.sql");
 
@@ -69,12 +70,15 @@ beforeAll(async () => {
     await db.exec(TRANSFERS);
     await db.exec(RESULTS);
     await db.exec(RESET);
+    await db.exec(PLAYING);
     await db.exec(SEED);
   }
   await signUp(ADMIN, "admin@example.com", "Ada Admin");
   await signUp(MEMBER, "member@example.com", "Mo Member");
   await signUp(OUTSIDER, "outsider@example.com", "Otto Outsider");
   await db.query(`update public.profiles set role = 'admin', joined_at = now() where id = $1`, [ADMIN]);
+  // Most tests pick the cheapest players regardless of club team; the limit has its own tests.
+  await db.query(`update public.club_settings set max_per_club_team = 5 where id`);
 }, 60_000);
 
 describe("schema and seed", () => {
@@ -824,6 +828,57 @@ describe("publishing end to end (same queries as src/lib/recalculate.ts)", () =>
     )).rows.filter((r) => r.team === "Score Draw");
     expect(check).toHaveLength(1);
     expect(check[0].expected_points).toBe(check[0].stored_points);
+  });
+});
+
+describe("non-playing accounts and the club-team limit", () => {
+  const NON_PLAYER = "77777777-7777-4777-8777-777777777777";
+  const LIMIT_TESTER = "88888888-8888-4888-8888-888888888888";
+  const pick = (ids: string[]) =>
+    JSON.stringify(ids.map((player_id, i) => ({ position: i + 1, player_id, is_captain: i === 0, is_vice_captain: i === 1 })));
+  const team = async (club: number, n: number) =>
+    (await db.query<{ id: string }>(`select id from public.players where club_team = $1 and is_active order by price limit $2`, [club, n])).rows.map((r) => r.id);
+
+  beforeAll(async () => {
+    for (const [id, email, name] of [[NON_PLAYER, "organiser@example.com", "Org Aniser"], [LIMIT_TESTER, "limit@example.com", "Lim Itter"]]) {
+      await signUp(id, email, name);
+      await as(id, `select public.join_club($1)`, [await joinCode()]);
+      await as(id, `update public.profiles set team_name = $2 where id = $1`, [id, `Team ${name}`]);
+    }
+  });
+
+  it("only lets admins switch someone to not playing, and shows it in the user list", async () => {
+    await expect(as(MEMBER, `select public.admin_set_playing($1, false)`, [NON_PLAYER])).rejects.toThrow(/Admins only/);
+    await expect(as(NON_PLAYER, `update public.profiles set is_playing = false where id = $1`, [NON_PLAYER])).rejects.toThrow(/permission denied/);
+    await as(ADMIN, `select public.admin_set_playing($1, false)`, [NON_PLAYER]);
+    const rows = await as<{ id: string; is_playing: boolean }>(ADMIN, `select id, is_playing from public.admin_list_users() where id = $1`, [NON_PLAYER]);
+    expect(rows).toEqual([{ id: NON_PLAYER, is_playing: false }]);
+  });
+
+  it("never locks in a team for a non-playing account", async () => {
+    await db.query(`update public.club_settings set max_per_club_team = 5 where id`);
+    const ids = (await db.query<{ id: string }>(`select id from public.players where is_active order by price limit 5`)).rows.map((r) => r.id);
+    await as(NON_PLAYER, `select public.save_squad($1::jsonb)`, [pick(ids)]);
+    await as(LIMIT_TESTER, `select public.save_squad($1::jsonb)`, [pick(ids)]);
+    const [gw] = await as<{ id: number }>(ADMIN, `insert into public.gameweeks (number, deadline) values (990, now() + interval '15 minutes') returning id`);
+    await as(ADMIN, `update public.gameweeks set deadline = now() - interval '1 second' where id = $1`, [gw.id]);
+    await as(MEMBER, `select public.sync_gameweeks()`);
+    const { rows } = await db.query<{ user_id: string }>(`select user_id from public.gameweek_entries where gameweek_id = $1`, [gw.id]);
+    expect(rows.map((r) => r.user_id)).toContain(LIMIT_TESTER);
+    expect(rows.map((r) => r.user_id)).not.toContain(NON_PLAYER);
+  });
+
+  it("allows at most 2 players from any one club team when players change", async () => {
+    await db.query(`update public.club_settings set max_per_club_team = 2 where id`);
+    const ones = await team(6, 3); // cheapest club team, so the budget isn't what fails
+    const others = [...(await team(5, 1)), ...(await team(4, 1))];
+    expect(ones).toHaveLength(3);
+    await expect(as(LIMIT_TESTER, `select public.save_squad($1::jsonb)`, [pick([...ones, ...others])])).rejects.toThrow(
+      /at most 2 players from the 6s/,
+    );
+    const ok = [...ones.slice(0, 2), ...(await team(3, 1)), ...others];
+    await expect(as(LIMIT_TESTER, `select public.save_squad($1::jsonb)`, [pick(ok)])).resolves.toBeTruthy();
+    await db.query(`update public.club_settings set max_per_club_team = 5 where id`);
   });
 });
 

@@ -23,3 +23,13 @@ export async function removeUser(userId: string): Promise<ActionResult> {
   revalidatePath("/", "layout");
   return ok(undefined, "User removed");
 }
+
+/** Not playing = keeps full access but is left out of the league (e.g. the organiser). */
+export async function setPlaying(userId: string, playing: boolean): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_set_playing", { p_user_id: userId, p_playing: playing });
+  if (error) return fail(describeDbError(error));
+  revalidatePath("/", "layout");
+  return ok(undefined, playing ? "now playing and shown in the league" : "not playing, hidden from the league");
+}
