@@ -38,9 +38,13 @@ import { formatLondonDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { saveSquadAction } from "./actions";
 import { ChipsCard } from "./chips-card";
+import { CourtPitch, PitchSummary, type PitchSlot } from "./pitch-view";
 import { PlayerPool } from "./player-pool";
 import { PlayerSheet } from "./player-sheet";
 import { TransferPreview } from "./transfer-preview";
+
+/** true: starters drawn on the court (pitch-view.tsx); false: the original card grid. */
+const PITCH_VIEW = true;
 
 export function TeamBuilder({
   teamName,
@@ -125,76 +129,132 @@ export function TeamBuilder({
 
   const selectedIndex = selected ? squad.findIndex((s) => s?.playerId === selected) : -1;
 
-  return (
-    <div className="space-y-4">
-      <section className="rounded-panel bg-card p-4 shadow-soft sm:p-5">
-        <StatsHeader
-          title={teamName}
-          eyebrow={
-            <span className="text-xs font-semibold tracking-wide text-primary uppercase">
-              {nextGameweek ? `Gameweek ${nextGameweek.number}` : "Your squad"}
-            </span>
-          }
-          actions={
-            <>
+  const eyebrowText = nextGameweek ? `Gameweek ${nextGameweek.number}` : "Your squad";
+  const autoPickButton = (
+    <Button
+      variant="soft"
+      size="sm"
+      disabled={count === 5}
+      onClick={() => setSquad((s) => autoPick(s, players, budget, Math.random, maxPerClubTeam))}
+    >
+      <Shuffle />
+      Auto-pick
+    </Button>
+  );
+  const headerStats = [
+    { label: "Players", value: `${count} / 5` },
+    { label: "Budget left", value: <span className={left < 0 ? "text-primary" : ""}>{formatPrice(left)}</span> },
+    { label: "Until deadline", value: <DeadlineCountdown deadline={nextGameweek?.deadline ?? null} /> },
+  ];
+  const transfersBar = (className?: string) => (
+    <TransfersBar
+      className={className}
+      gameweekNumber={nextGameweek?.number ?? null}
+      isNewManager={isNewManager}
+      summary={transfers}
+      freeTransfers={freeTransfers}
+      chipName={rules.unlimited && activeChip ? chipInfo(activeChip).name : null}
+    />
+  );
+
+  const pitchSlot = (index: number, emptyLabel: string): PitchSlot => {
+    const slot = squad[index];
+    const player = slot && byId.get(slot.playerId);
+    return player
+      ? { kind: "player", id: player.id, data: cardData(player, index), onClick: () => setSelected(player.id) }
+      : { kind: "empty", label: emptyLabel };
+  };
+
+  // Pitch view: a compact navy summary, then the team on the court. The wrapper fills
+  // the first screen, so everything after it starts below the bench strip.
+  const pitch = (
+    <div style={{ minHeight: "calc(100svh - var(--topbar-height) - env(safe-area-inset-top) - 1rem)" }}>
+      <PitchSummary
+        eyebrow={<span className="text-[11px] font-semibold tracking-wide text-line-yellow uppercase">{eyebrowText}</span>}
+        title={teamName}
+        actions={
+          <>
+            {autoPickButton}
+            {isNewManager && (
               <Button
-                variant="soft"
                 size="sm"
-                disabled={count === 5}
-                onClick={() => setSquad((s) => autoPick(s, players, budget, Math.random, maxPerClubTeam))}
+                className="bg-white text-navy shadow-none hover:bg-white/90"
+                disabled={count === 0}
+                onClick={() => setSquad(emptySquad())}
               >
-                <Shuffle />
-                Auto-pick
+                <RotateCcw />
+                Clear
               </Button>
-              {isNewManager && (
-                <Button variant="secondary" size="sm" disabled={count === 0} onClick={() => setSquad(emptySquad())}>
-                  <RotateCcw />
-                  Clear
-                </Button>
-              )}
-            </>
-          }
-          stats={[
-            { label: "Players", value: `${count} / 5` },
-            { label: "Budget left", value: <span className={left < 0 ? "text-primary" : ""}>{formatPrice(left)}</span> },
-            { label: "Until deadline", value: <DeadlineCountdown deadline={nextGameweek?.deadline ?? null} /> },
-          ]}
-        />
+            )}
+          </>
+        }
+        stats={headerStats}
+      >
+        {transfersBar("mt-2 py-1.5 text-xs")}
+      </PitchSummary>
+      <CourtPitch
+        starters={[0, 1, 2, 3].map((i) => pitchSlot(i, "Add starter"))}
+        bench={pitchSlot(BENCH_INDEX, "Add bench player")}
+        onAddPlayer={scrollToPool}
+      />
+    </div>
+  );
 
-        <TransfersBar
-          gameweekNumber={nextGameweek?.number ?? null}
-          isNewManager={isNewManager}
-          summary={transfers}
-          freeTransfers={freeTransfers}
-          chipName={rules.unlimited && activeChip ? chipInfo(activeChip).name : null}
-        />
+  // Original view: stats and a 2×2 card grid in one white card.
+  const grid = (
+        <section className="rounded-panel bg-card p-4 shadow-soft sm:p-5">
+          <StatsHeader
+            title={teamName}
+            eyebrow={
+              <span className="text-xs font-semibold tracking-wide text-primary uppercase">{eyebrowText}</span>
+            }
+            actions={
+              <>
+                {autoPickButton}
+                {isNewManager && (
+                  <Button variant="secondary" size="sm" disabled={count === 0} onClick={() => setSquad(emptySquad())}>
+                    <RotateCcw />
+                    Clear
+                  </Button>
+                )}
+              </>
+            }
+            stats={headerStats}
+          />
 
-        <h2 className="mt-4 mb-3 text-sm font-semibold text-muted-foreground">Starters</h2>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-          {squad.slice(0, BENCH_INDEX).map((slot, i) => {
+          {transfersBar()}
+
+          <h2 className="mt-4 mb-3 text-sm font-semibold text-muted-foreground">Starters</h2>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+            {squad.slice(0, BENCH_INDEX).map((slot, i) => {
+              const player = slot && byId.get(slot.playerId);
+              return player ? (
+                <PlayerCard key={player.id} player={cardData(player, i)} onClick={() => setSelected(player.id)} />
+              ) : (
+                <EmptySlotCard key={`empty-${i}`} label="Add starter" onClick={scrollToPool} />
+              );
+            })}
+          </div>
+
+          <h2 className="mt-6 mb-3 text-sm font-semibold text-muted-foreground">Bench</h2>
+          {(() => {
+            const slot = squad[BENCH_INDEX];
             const player = slot && byId.get(slot.playerId);
             return player ? (
-              <PlayerCard key={player.id} player={cardData(player, i)} onClick={() => setSelected(player.id)} />
+              <BenchCard player={cardData(player, BENCH_INDEX)} onClick={() => setSelected(player.id)} />
             ) : (
-              <EmptySlotCard key={`empty-${i}`} label="Add starter" onClick={scrollToPool} />
+              <EmptySlotCard bench label="Add bench player" onClick={scrollToPool} />
             );
-          })}
-        </div>
+          })()}
+          <p className="mt-2 px-1 text-xs text-muted-foreground">
+            The bench player only scores if a starter doesn&apos;t play. Tap a player for captain and bench options.
+          </p>
+        </section>
+  );
 
-        <h2 className="mt-6 mb-3 text-sm font-semibold text-muted-foreground">Bench</h2>
-        {(() => {
-          const slot = squad[BENCH_INDEX];
-          const player = slot && byId.get(slot.playerId);
-          return player ? (
-            <BenchCard player={cardData(player, BENCH_INDEX)} onClick={() => setSelected(player.id)} />
-          ) : (
-            <EmptySlotCard bench label="Add bench player" onClick={scrollToPool} />
-          );
-        })()}
-        <p className="mt-2 px-1 text-xs text-muted-foreground">
-          The bench player only scores if a starter doesn&apos;t play. Tap a player for captain and bench options.
-        </p>
-      </section>
+  return (
+    <div className="space-y-4">
+      {PITCH_VIEW ? pitch : grid}
 
       <ChipsCard
         activeChip={activeChip}
@@ -286,12 +346,14 @@ export function TeamBuilder({
 
 /** "1 free · 2 made → −5 pts", or why transfers are free right now. */
 function TransfersBar({
+  className,
   gameweekNumber,
   isNewManager,
   summary,
   freeTransfers,
   chipName,
 }: {
+  className?: string;
   gameweekNumber: number | null;
   isNewManager: boolean;
   summary: TransferSummary;
@@ -308,6 +370,7 @@ function TransfersBar({
       className={cn(
         "mt-3 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm",
         chipName ? "bg-gold-soft text-gold-ink" : "bg-muted/70",
+        className,
       )}
     >
       <ArrowLeftRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -341,12 +404,12 @@ function DeadlineNote({
   hitPoints: number;
 }) {
   return (
-    <div className="space-y-2 px-1 text-xs leading-relaxed text-muted-foreground">
+    <div className="space-y-2 rounded-glass bg-navy-glass p-4 text-xs leading-relaxed text-white/75">
       <p>
         {nextGameweek ? (
           <>
             Deadline for gameweek {nextGameweek.number}:{" "}
-            <strong className="text-foreground">{formatLondonDateTime(new Date(nextGameweek.deadline))}</strong>. Your
+            <strong className="text-white">{formatLondonDateTime(new Date(nextGameweek.deadline))}</strong>. Your
             team is locked in then; changes after that count for the following gameweek.
           </>
         ) : (

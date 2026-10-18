@@ -4,6 +4,7 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
 import "./globals.css";
+import { CourtBackground } from "@/components/app/court-background";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
@@ -19,13 +20,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#d7192d",
+  themeColor: "#0f1d4a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-GB" className="h-full">
       <body className="min-h-full">
+        <CourtBackground />
         {children}
         <Toaster />
       </body>

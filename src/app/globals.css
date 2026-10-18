@@ -8,16 +8,24 @@
  */
 
 :root {
-  /* Brand palette */
-  --brand-red: #d7192d;
-  --brand-red-hover: #b8111f;
-  --brand-red-soft: #fdecee;
-  --brand-ink: #111418;
-  --brand-ink-soft: #2a2f36;
+  /* Court palette: the app sits on a bird's-eye hard court (public/court-bg.svg) */
+  --court-red: #d9463c;
+  --court-blue: #1e4bd2;
+  --line-yellow: #f4d128;
+  --line-white: #f5f7fc;
+  --navy: #0f1d4a;
+  --navy-glass: rgba(15, 29, 74, 0.85);
+
+  /* Brand palette (mapped onto the court palette) */
+  --brand-red: var(--court-red);
+  --brand-red-hover: #c13a31;
+  --brand-red-soft: #fbe9e7;
+  --brand-ink: var(--navy);
+  --brand-ink-soft: #1b2c66;
   --brand-white: #ffffff;
-  --brand-gold: #d4a72c;
-  --brand-gold-soft: #fbf3dc;
-  --brand-gold-ink: #6e5100;
+  --brand-gold: var(--line-yellow);
+  --brand-gold-soft: #fdf5cf;
+  --brand-gold-ink: var(--navy);
 
   /* Neutrals */
   --page: #f3f4f6;
@@ -30,7 +38,7 @@
   /* Status */
   --success: #16a34a;
   --success-soft: #e8f6ed;
-  --danger: #d7192d;
+  --danger: var(--court-red);
 
   /* shadcn/ui semantic tokens */
   --background: var(--page);
@@ -93,6 +101,14 @@
   --color-gold-ink: var(--brand-gold-ink);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
+  --color-court-red: var(--court-red);
+  --color-court-blue: var(--court-blue);
+  --color-line-yellow: var(--line-yellow);
+  --color-line-white: var(--line-white);
+  --color-navy: var(--navy);
+  --color-navy-glass: var(--navy-glass);
+  /* Fixed light tile (player photo cards), whatever surface it sits on */
+  --color-tile: var(--surface-muted);
 
   /* Fonts */
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -104,12 +120,15 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-card: 1.25rem;
-  --radius-panel: 1.75rem;
+  --radius-panel: 1.125rem;
+  --radius-glass: 1.375rem;
 
   /* Shadows (soft, as in the reference design) */
-  --shadow-soft: 0 1px 2px rgb(17 20 24 / 0.04), 0 4px 16px rgb(17 20 24 / 0.06);
-  --shadow-lifted: 0 2px 4px rgb(17 20 24 / 0.05), 0 12px 32px rgb(17 20 24 / 0.1);
-  --shadow-nav: 0 -4px 24px rgb(17 20 24 / 0.06);
+  /* Shadows (stronger than on a plain page, so cards lift off the court) */
+  --shadow-soft: 0 8px 20px rgb(0 0 0 / 0.25);
+  --shadow-lifted: 0 10px 28px rgb(0 0 0 / 0.35);
+  --shadow-nav: 0 -4px 24px rgb(0 0 0 / 0.2);
+  --shadow-token: 0 6px 14px rgb(0 0 0 / 0.35);
 
   /* Spacing tokens */
   --spacing-nav: var(--nav-height);
@@ -124,9 +143,39 @@
   }
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Shows only during overscroll; the court layer covers the screen otherwise. */
+    background: var(--navy);
   }
+  /* No solid page colour: the fixed court layer (.court-bg) shows through. */
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply text-foreground font-sans antialiased;
+  }
+
+  /*
+   * Text that sits straight on the court (or on a navy panel) is white.
+   * White surfaces inside switch back to dark text, so existing cards work
+   * unchanged. Dialogs and menus are portalled outside, so they stay dark.
+   */
+  .on-dark {
+    --foreground: #ffffff;
+    --muted-foreground: rgb(255 255 255 / 0.7);
+    --border: rgb(255 255 255 / 0.15);
+    --muted: rgb(255 255 255 / 0.12);
+    --surface-muted-strong: rgb(255 255 255 / 0.2);
+    color: var(--foreground);
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.35); /* keeps text legible where court lines cross it */
+  }
+  .bg-card,
+  .bg-surface,
+  .bg-popover,
+  .bg-background {
+    --foreground: var(--brand-ink);
+    --muted-foreground: var(--text-muted);
+    --border: var(--line);
+    --muted: var(--surface-muted);
+    --surface-muted-strong: #dcdfe5;
+    color: var(--foreground);
+    text-shadow: none;
   }
   h1,
   h2,
@@ -134,4 +183,37 @@
   h4 {
     @apply font-heading font-semibold tracking-tight;
   }
+}
+
+/*
+ * The court: a fixed layer behind everything. Not background-attachment:
+ * fixed, which iOS Safari ignores (the court would stretch down the whole
+ * page). 100lvh fills the screen behind the iOS toolbars. --court-dim darkens
+ * it on text-heavy pages (set per route by <CourtBackground>).
+ */
+.court-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100lvh;
+  z-index: -1;
+  pointer-events: none;
+  background: url(/court-bg.svg) center / 100% 100% no-repeat;
+}
+.court-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 18, 48, var(--court-dim, 0));
+  transition: background 0.3s;
+}
+
+/* Unlayered, so they beat the text-primary utility: red text would vanish on
+   the red court, so it turns yellow there, and red again inside white cards. */
+.on-dark .text-primary {
+  color: var(--line-yellow);
+}
+.on-dark :is(.bg-card, .bg-surface, .bg-background) .text-primary {
+  color: var(--primary);
 }

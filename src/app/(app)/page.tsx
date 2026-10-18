@@ -88,7 +88,7 @@ export default async function HomePage() {
           </span>
         </Link>
       )}
-      <section className="rounded-panel bg-card p-4 shadow-soft sm:p-5">
+      <section className="on-dark rounded-glass bg-navy-glass p-4 shadow-soft sm:p-5">
         <StatsHeader
           eyebrow={
             <span className="text-xs font-semibold tracking-wide text-primary uppercase">
@@ -139,10 +139,12 @@ export default async function HomePage() {
             </span>
           </Link>
         )}
+      </section>
 
+      <section className="rounded-panel bg-card p-4 shadow-soft sm:p-5">
         {isFull(squad) ? (
           <>
-            <h2 className="mt-4 mb-3 text-sm font-semibold text-muted-foreground">Starters</h2>
+            <h2 className="mb-3 w-fit rounded-full bg-navy px-3 py-1 text-[14px] text-white">Starters</h2>
             <div className="grid grid-cols-2 gap-x-3 gap-y-4">
               {[0, 1, 2, 3].map((i) => {
                 const data = card(i);
@@ -151,7 +153,7 @@ export default async function HomePage() {
             </div>
             {bench && (
               <>
-                <h2 className="mt-6 mb-3 text-sm font-semibold text-muted-foreground">Bench</h2>
+                <h2 className="mt-6 mb-3 w-fit rounded-full bg-navy px-3 py-1 text-[14px] text-white">Bench</h2>
                 <BenchCard player={bench} />
               </>
             )}
@@ -161,7 +163,7 @@ export default async function HomePage() {
           </>
         ) : (
           <EmptyState
-            className="mt-4 shadow-none"
+            className="shadow-none"
             icon={Users}
             title={picks.length ? "Finish picking your team" : "Pick your team"}
             description={`Choose 4 starters and 1 bench player within ${formatPrice(budget)}, then pick a captain.`}

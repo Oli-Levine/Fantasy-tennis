@@ -58,7 +58,7 @@ export function PlayerCard({
   return (
     <Tappable onClick={onClick} label={`${player.name}: options`} className={cn("min-w-0", className)}>
       <figure className="min-w-0">
-        <div className="relative aspect-[5/4] overflow-hidden rounded-card bg-muted">
+        <div className="relative aspect-[5/4] overflow-hidden rounded-card bg-tile">
           {/* soft diagonal highlight, as in the reference */}
           <div aria-hidden="true" className="absolute -right-1/4 -bottom-1/2 size-[130%] rounded-full bg-white/45" />
           <div className="absolute inset-0 flex items-end justify-center">
@@ -136,7 +136,8 @@ export function EmptySlotCard({
   );
 }
 
-function CaptainBadgeChip({ badge }: { badge: CaptainBadge }) {
+/** C / TC = solid yellow; VC = yellow outline on white. Positioned top-right of a card unless className says otherwise. */
+export function CaptainBadgeChip({ badge, className }: { badge: CaptainBadge; className?: string }) {
   const label = { C: "Captain", VC: "Vice-captain", TC: "Triple captain" }[badge];
   return (
     <span
@@ -145,6 +146,7 @@ function CaptainBadgeChip({ badge }: { badge: CaptainBadge }) {
       className={cn(
         "absolute top-2.5 right-2.5 flex h-7 min-w-7 items-center justify-center rounded-full px-1.5 font-heading text-xs font-bold shadow-soft",
         badge === "VC" ? "bg-surface text-ink ring-2 ring-gold" : "bg-gold text-ink",
+        className,
       )}
     >
       {badge}

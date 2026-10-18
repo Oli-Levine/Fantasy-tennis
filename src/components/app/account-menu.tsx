@@ -29,7 +29,7 @@ export function AccountMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex size-9 cursor-pointer items-center justify-center rounded-full bg-ink font-heading text-[13px] font-semibold text-white outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          className="flex size-9 cursor-pointer items-center justify-center rounded-full bg-white font-heading text-[13px] font-semibold text-navy outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
         >
           {initials(name)}
         </DropdownMenuTrigger>
