@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 
-/** Full-strength court on Home and Team; a dark backdrop on text-heavy pages. */
-const FULL_COURT = ["/", "/team"];
+/** Full-strength court on the sign-in page, Home and Team; a dark backdrop on text-heavy pages. */
+const FULL_COURT = ["/", "/team", "/login"];
 const DIMMED = 0.55;
 
 /** The fixed court layer behind every screen (styles in globals.css). */

@@ -17,42 +17,19 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
   return (
     <main
-      className="relative flex min-h-dvh flex-col overflow-hidden bg-ink text-white"
+      className="relative flex min-h-dvh flex-col text-white"
       style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* tennis court, seen from above */}
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 120 200"
-        preserveAspectRatio="xMidYMin meet"
-        className="pointer-events-none absolute inset-x-10 top-10 h-[44%] w-[calc(100%-5rem)] text-white opacity-[0.09]"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.2"
-      >
-        <rect x="6" y="4" width="108" height="192" />
-        <line x1="19.5" y1="4" x2="19.5" y2="196" />
-        <line x1="100.5" y1="4" x2="100.5" y2="196" />
-        <line x1="19.5" y1="54" x2="100.5" y2="54" />
-        <line x1="19.5" y1="146" x2="100.5" y2="146" />
-        <line x1="60" y1="54" x2="60" y2="146" />
-        <line x1="2" y1="100" x2="118" y2="100" strokeWidth="2" />
-      </svg>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-40 -right-40 size-96 rounded-full bg-primary/40 blur-3xl"
-      />
-
-      <div className="relative flex flex-1 flex-col justify-end px-6 pb-6">
-        <LogoMark className="mb-6 h-24" />
-        <h1 className="text-[2.5rem] leading-[1.05] font-bold">
-          UOB Tennis
-          <br />
-          <span className="text-line-yellow">Fantasy</span>
-        </h1>
-        <p className="mt-3 max-w-xs text-base text-white/70">
-          Pick your club squad, captain your star and climb the league.
-        </p>
+      {/* The full-strength court (CourtBackground) shows through; the crest and name sit on a navy panel. */}
+      <div className="flex flex-1 items-center justify-center px-6 py-8">
+        <div className="on-dark w-full max-w-xs rounded-glass bg-navy/95 px-6 pt-7 pb-6 text-center shadow-lifted">
+          <LogoMark className="mx-auto block h-28" />
+          <h1 className="mt-5 text-[2.25rem] leading-[1.05] font-bold">
+            UOB Tennis
+            <br />
+            <span className="text-line-yellow">Fantasy</span>
+          </h1>
+        </div>
       </div>
 
       <div className="relative rounded-t-panel bg-surface px-6 pt-7 pb-8 text-foreground">
